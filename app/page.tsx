@@ -6,7 +6,7 @@ import SunCalc from "suncalc";
 export default function Page() {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState(null);
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((pos) => {
