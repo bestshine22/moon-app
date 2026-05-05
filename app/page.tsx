@@ -17,9 +17,14 @@ function toDMS(value: number, type: "lat" | "lng") {
   return `${deg}°${min}'${sec}" ${dir}`;
 }
 
+function radToDeg(r: number) {
+  return r * 180 / Math.PI;
+}
+
 export default function Page() {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
   const [result, setResult] = useState<any>(null);
   const [heading, setHeading] = useState(0);
   const [lang, setLang] = useState<"ar" | "en">("ar");
@@ -39,21 +44,27 @@ export default function Page() {
     ar: {
       title: "🌙 مرصد الهلال",
       calc: "احسب",
+      observer: "📍 موقع الراصد",
+      moon: "🌙 بيانات القمر",
       lat: "خط العرض",
       lng: "خط الطول",
-      altitude: "ارتفاع القمر",
-      azimuth: "اتجاه القمر",
+      altitude: "ارتفاع",
+      azimuth: "اتجاه",
       illumination: "الإضاءة",
-      age: "عمر القمر",
+      age: "العمر",
       sunset: "غروب الشمس",
       moonset: "غروب القمر",
       lag: "مكث الهلال",
       elongation: "الاستطالة",
       visibility: "إمكانية الرؤية",
+      ra: "المطلع المستقيم (RA)",
+      dec: "الميل (Dec)"
     },
     en: {
-      title: "🌙 Hilal Tracker",
+      title: "🌙 Hilal Observatory",
       calc: "Calculate",
+      observer: "📍 Observer",
+      moon: "🌙 Moon Data",
       lat: "Latitude",
       lng: "Longitude",
       altitude: "Altitude",
@@ -65,21 +76,23 @@ export default function Page() {
       lag: "Lag",
       elongation: "Elongation",
       visibility: "Visibility",
+      ra: "Right Ascension",
+      dec: "Declination"
     }
   };
 
   const calc = () => {
-    const date = new Date();
+    const d = new Date(date);
     const latNum = Number(lat);
     const lngNum = Number(lng);
 
-    const moon = SunCalc.getMoonPosition(date, latNum, lngNum);
-    const illum = SunCalc.getMoonIllumination(date);
-    const times = SunCalc.getTimes(date, latNum, lngNum);
-    const moonTimes = SunCalc.getMoonTimes(date, latNum, lngNum);
+    const moon = SunCalc.getMoonPosition(d, latNum, lngNum);
+    const illum = SunCalc.getMoonIllumination(d);
+    const times = SunCalc.getTimes(d, latNum, lngNum);
+    const moonTimes = SunCalc.getMoonTimes(d, latNum, lngNum);
 
-    const altitude = moon.altitude * 180 / Math.PI;
-    const azimuth = moon.azimuth * 180 / Math.PI + 180;
+    const altitude = radToDeg(moon.altitude);
+    const azimuth = radToDeg(moon.azimuth) + 180;
 
     const lag = moonTimes.set && times.sunset
       ? (moonTimes.set.getTime() - times.sunset.getTime()) / 60000
@@ -104,6 +117,8 @@ export default function Page() {
       lag: lag.toFixed(1),
       elongation: elongation.toFixed(1),
       visibility,
+      ra: radToDeg(moon.rightAscension).toFixed(2),
+      dec: radToDeg(moon.declination).toFixed(2),
     });
   };
 
@@ -117,52 +132,34 @@ export default function Page() {
       padding: 20,
       textAlign: "center"
     }}>
-      <h1 style={{ fontSize: 28 }}>{t[lang].title}</h1>
+      <h1>{t[lang].title}</h1>
 
-      <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-        style={{ marginBottom: 10 }}>
+      <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
         🌐 {lang === "ar" ? "English" : "العربية"}
       </button>
 
-      <div style={{
-        background: "#0f172a",
-        padding: 20,
-        borderRadius: 16,
-        maxWidth: 400,
-        margin: "auto",
-        boxShadow: "0 0 30px rgba(0,0,255,0.3)"
-      }}>
-        <input placeholder={t[lang].lat} value={lat}
-          onChange={(e) => setLat(e.target.value)}
-          style={{ width: "100%", marginBottom: 10, padding: 10 }} />
-
-        <input placeholder={t[lang].lng} value={lng}
-          onChange={(e) => setLng(e.target.value)}
-          style={{ width: "100%", marginBottom: 10, padding: 10 }} />
-
-        <button onClick={calc}
-          style={{
-            width: "100%",
-            padding: 12,
-            background: "#2563eb",
-            borderRadius: 8
-          }}>
-          {t[lang].calc}
-        </button>
+      <div style={{ marginTop: 15 }}>
+        <input type="datetime-local" value={date}
+          onChange={(e) => setDate(e.target.value)} />
       </div>
 
-      {result && (
-        <div style={{
-          marginTop: 20,
-          background: "#0f172a",
-          padding: 20,
-          borderRadius: 16,
-          maxWidth: 400,
-          marginInline: "auto"
-        }}>
-          <p>{t[lang].lat}: {toDMS(Number(lat), "lat")}</p>
-          <p>{t[lang].lng}: {toDMS(Number(lng), "lng")}</p>
+      <div style={{ marginTop: 10 }}>
+        <input placeholder={t[lang].lat} value={lat}
+          onChange={(e) => setLat(e.target.value)} />
+        <input placeholder={t[lang].lng} value={lng}
+          onChange={(e) => setLng(e.target.value)} />
+      </div>
 
+      <button onClick={calc}>{t[lang].calc}</button>
+
+      {result && (
+        <div style={{ marginTop: 20 }}>
+
+          <h3>{t[lang].observer}</h3>
+          <p>{lat}, {lng}</p>
+          <p>{toDMS(Number(lat), "lat")} , {toDMS(Number(lng), "lng")}</p>
+
+          <h3>{t[lang].moon}</h3>
           <p>{t[lang].altitude}: {result.altitude}°</p>
           <p>{t[lang].azimuth}: {result.azimuth}°</p>
 
@@ -174,8 +171,10 @@ export default function Page() {
           <p>{t[lang].lag}: {result.lag} min</p>
 
           <p>{t[lang].elongation}: {result.elongation}°</p>
+          <p>{t[lang].visibility}: {result.visibility}</p>
 
-          <h3>{t[lang].visibility}: {result.visibility}</h3>
+          <p>{t[lang].ra}: {result.ra}°</p>
+          <p>{t[lang].dec}: {result.dec}°</p>
 
           <div style={{
             marginTop: 20,
@@ -184,6 +183,7 @@ export default function Page() {
           }}>
             ↑
           </div>
+
         </div>
       )}
     </div>
