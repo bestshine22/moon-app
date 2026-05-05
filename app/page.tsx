@@ -6,12 +6,8 @@ import SunCalc from "suncalc";
 function toDMS(value: number, type: "lat" | "lng") {
   const dir =
     type === "lat"
-      ? value >= 0
-        ? "N"
-        : "S"
-      : value >= 0
-      ? "E"
-      : "W";
+      ? value >= 0 ? "N" : "S"
+      : value >= 0 ? "E" : "W";
 
   const abs = Math.abs(value);
   const deg = Math.floor(abs);
@@ -26,6 +22,7 @@ export default function Page() {
   const [lng, setLng] = useState("");
   const [result, setResult] = useState<any>(null);
   const [heading, setHeading] = useState(0);
+  const [lang, setLang] = useState<"ar" | "en">("ar");
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((pos) => {
@@ -34,15 +31,45 @@ export default function Page() {
     });
 
     window.addEventListener("deviceorientation", (e) => {
-      if (e.alpha !== null) {
-        setHeading(360 - e.alpha);
-      }
+      if (e.alpha !== null) setHeading(360 - e.alpha);
     });
   }, []);
 
+  const t = {
+    ar: {
+      title: "🌙 مرصد الهلال",
+      calc: "احسب",
+      lat: "خط العرض",
+      lng: "خط الطول",
+      altitude: "ارتفاع القمر",
+      azimuth: "اتجاه القمر",
+      illumination: "الإضاءة",
+      age: "عمر القمر",
+      sunset: "غروب الشمس",
+      moonset: "غروب القمر",
+      lag: "مكث الهلال",
+      elongation: "الاستطالة",
+      visibility: "إمكانية الرؤية",
+    },
+    en: {
+      title: "🌙 Hilal Tracker",
+      calc: "Calculate",
+      lat: "Latitude",
+      lng: "Longitude",
+      altitude: "Altitude",
+      azimuth: "Azimuth",
+      illumination: "Illumination",
+      age: "Age",
+      sunset: "Sunset",
+      moonset: "Moonset",
+      lag: "Lag",
+      elongation: "Elongation",
+      visibility: "Visibility",
+    }
+  };
+
   const calc = () => {
     const date = new Date();
-
     const latNum = Number(lat);
     const lngNum = Number(lng);
 
@@ -60,11 +87,11 @@ export default function Page() {
 
     const elongation = illum.phase * 360;
 
-    let visibility = "❌ Not visible";
+    let visibility = lang === "ar" ? "❌ غير مرئي" : "❌ Not visible";
     if (lag > 40 && altitude > 5 && elongation > 10) {
-      visibility = "✅ Visible";
+      visibility = lang === "ar" ? "✅ مرئي" : "✅ Visible";
     } else if (lag > 20) {
-      visibility = "⚠️ Difficult";
+      visibility = lang === "ar" ? "⚠️ صعب" : "⚠️ Difficult";
     }
 
     setResult({
@@ -80,68 +107,83 @@ export default function Page() {
     });
   };
 
+  const direction = result ? (Number(result.azimuth) - heading + 360) % 360 : 0;
+
   return (
     <div style={{
       minHeight: "100vh",
-      background: "linear-gradient(to bottom, #020617, #0f172a)",
+      background: "radial-gradient(circle at top, #020617, #000)",
       color: "white",
       padding: 20,
       textAlign: "center"
     }}>
-      <h1>🌙 Moon Hilal Tracker</h1>
+      <h1 style={{ fontSize: 28 }}>{t[lang].title}</h1>
+
+      <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+        style={{ marginBottom: 10 }}>
+        🌐 {lang === "ar" ? "English" : "العربية"}
+      </button>
 
       <div style={{
-        background: "#111827",
+        background: "#0f172a",
         padding: 20,
-        borderRadius: 12,
+        borderRadius: 16,
         maxWidth: 400,
-        margin: "auto"
+        margin: "auto",
+        boxShadow: "0 0 30px rgba(0,0,255,0.3)"
       }}>
-        <input placeholder="Latitude" value={lat}
+        <input placeholder={t[lang].lat} value={lat}
           onChange={(e) => setLat(e.target.value)}
           style={{ width: "100%", marginBottom: 10, padding: 10 }} />
 
-        <input placeholder="Longitude" value={lng}
+        <input placeholder={t[lang].lng} value={lng}
           onChange={(e) => setLng(e.target.value)}
           style={{ width: "100%", marginBottom: 10, padding: 10 }} />
 
         <button onClick={calc}
-          style={{ width: "100%", padding: 12, background: "#2563eb", color: "white" }}>
-          Calculate
+          style={{
+            width: "100%",
+            padding: 12,
+            background: "#2563eb",
+            borderRadius: 8
+          }}>
+          {t[lang].calc}
         </button>
       </div>
 
       {result && (
         <div style={{
           marginTop: 20,
-          background: "#111827",
+          background: "#0f172a",
           padding: 20,
-          borderRadius: 12,
+          borderRadius: 16,
           maxWidth: 400,
           marginInline: "auto"
         }}>
-          <p>📍 Lat: {toDMS(Number(lat), "lat")}</p>
-          <p>📍 Lng: {toDMS(Number(lng), "lng")}</p>
+          <p>{t[lang].lat}: {toDMS(Number(lat), "lat")}</p>
+          <p>{t[lang].lng}: {toDMS(Number(lng), "lng")}</p>
 
-          <p>📍 Altitude: {result.altitude}°</p>
-          <p>🧭 Azimuth: {result.azimuth}°</p>
+          <p>{t[lang].altitude}: {result.altitude}°</p>
+          <p>{t[lang].azimuth}: {result.azimuth}°</p>
 
-          <p>💡 Illumination: {result.illumination}%</p>
-          <p>🌗 Age: {result.age} days</p>
+          <p>{t[lang].illumination}: {result.illumination}%</p>
+          <p>{t[lang].age}: {result.age}</p>
 
-          <hr />
+          <p>{t[lang].sunset}: {result.sunset}</p>
+          <p>{t[lang].moonset}: {result.moonset}</p>
+          <p>{t[lang].lag}: {result.lag} min</p>
 
-          <p>🌇 Sunset: {result.sunset}</p>
-          <p>🌙 Moonset: {result.moonset}</p>
-          <p>⏳ Lag: {result.lag} min</p>
+          <p>{t[lang].elongation}: {result.elongation}°</p>
 
-          <p>📐 Elongation: {result.elongation}°</p>
+          <h3>{t[lang].visibility}: {result.visibility}</h3>
 
-          <h3>{result.visibility}</h3>
-
-          <hr />
-
-          <p>🧭 Device Heading: {heading.toFixed(0)}°</p>
+          <div style={{
+            marginTop: 20,
+            fontSize: 40,
+            transform: `rotate(${direction}deg)`
+          }}>
+            ↑
+          </div>
         </div>
       )}
     </div>
