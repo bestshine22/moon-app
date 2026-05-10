@@ -5,298 +5,311 @@ import SunCalc from "suncalc";
 
 /* ================= HELPERS ================= */
 
-const rad2deg = (r:number)=> r * 180 / Math.PI;
+const rad2deg = (r: number) => (r * 180) / Math.PI;
 
-function toDMS(v:number,type:"lat"|"lng"){
+function toDMS(v: number, type: "lat" | "lng") {
+  const dir =
+    type === "lat"
+      ? v >= 0
+        ? "N"
+        : "S"
+      : v >= 0
+      ? "E"
+      : "W";
 
-  const dir=
-    type==="lat"
-      ? v>=0 ? "N" : "S"
-      : v>=0 ? "E" : "W";
+  const a = Math.abs(v);
 
-  const a=Math.abs(v);
-
-  const d=Math.floor(a);
-
-  const m=Math.floor((a-d)*60);
-
-  const s=(((a-d)*60-m)*60).toFixed(1);
+  const d = Math.floor(a);
+  const m = Math.floor((a - d) * 60);
+  const s = (((a - d) * 60 - m) * 60).toFixed(1);
 
   return `${d}°${m}'${s}" ${dir}`;
 }
 
-function localTime(date?:Date){
+function localTime(date?: Date) {
+  if (!date) return "-";
 
-  if(!date) return "-";
-
-  return new Intl.DateTimeFormat([],{
-    hour:"2-digit",
-    minute:"2-digit",
-    second:"2-digit"
+  return new Intl.DateTimeFormat([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).format(date);
-
 }
 
 /* ================= VISIBILITY ================= */
 
 function visibility(
-  arcv:number,
-  lag:number,
-  elong:number
-){
-
-  if(lag>40 && arcv>10 && elong>10){
-
+  arcv: number,
+  lag: number,
+  elong: number
+) {
+  if (lag > 40 && arcv > 10 && elong > 10) {
     return "✅ مرئي";
-
   }
 
-  if(lag>20 && arcv>6){
-
+  if (lag > 20 && arcv > 6) {
     return "⚠️ صعب";
-
   }
 
   return "❌ غير مرئي";
-
 }
 
 /* ================= PAGE ================= */
 
-export default function Page(){
-
-  /* ===== LOCAL TIME FIX ===== */
+export default function Page() {
+  /* ===== LOCAL TIME ===== */
 
   const now = new Date();
 
-  const localDateTime =
-    new Date(
-      now.getTime() - now.getTimezoneOffset() * 60000
-    )
-      .toISOString()
-      .slice(0,16);
+  const localDateTime = new Date(
+    now.getTime() - now.getTimezoneOffset() * 60000
+  )
+    .toISOString()
+    .slice(0, 16);
 
   /* ===== STATES ===== */
 
-  const [lat,setLat]=useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
 
-  const [lng,setLng]=useState("");
+  const [dt, setDt] = useState(localDateTime);
 
-  const [dt,setDt]=useState(localDateTime);
+  const [data, setData] = useState<any>(null);
 
-  const [data,setData]=useState<any>(null);
+  const [heading, setHeading] = useState(0);
 
-  const [heading,setHeading]=useState(0);
+  const [clouds, setClouds] = useState<number | null>(null);
 
-  const [clouds,setClouds]=useState<number|null>(null);
+  const [nasa, setNasa] = useState<any>(null);
 
-  const [nasa,setNasa]=useState<any>(null);
-
-  const videoRef=useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   /* ================= GPS + COMPASS ================= */
 
-  useEffect(()=>{
+  useEffect(() => {
+    if (!navigator.geolocation) return;
 
-    navigator.geolocation?.getCurrentPosition(p=>{
+    const watchId = navigator.geolocation.watchPosition(
+      (p) => {
+        const newLat =
+          p.coords.latitude.toFixed(6);
 
-      setLat(p.coords.latitude.toFixed(6));
+        const newLng =
+          p.coords.longitude.toFixed(6);
 
-      setLng(p.coords.longitude.toFixed(6));
+        setLat(newLat);
 
-    });
+        setLng(newLng);
+      },
 
-    window.addEventListener("deviceorientation",(e)=>{
+      (err) => {
+        console.log(err);
+      },
 
-      if(e.alpha!=null){
-
-        setHeading(360-e.alpha);
-
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000,
       }
+    );
 
-    });
+    const handleOrientation = (e: any) => {
+      if (e.alpha != null) {
+        setHeading(360 - e.alpha);
+      }
+    };
 
-  },[]);
+    window.addEventListener(
+      "deviceorientation",
+      handleOrientation
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(
+        watchId
+      );
+
+      window.removeEventListener(
+        "deviceorientation",
+        handleOrientation
+      );
+    };
+  }, []);
 
   /* ================= LIVE TRACKING ================= */
 
-  useEffect(()=>{
-
-    const i=setInterval(()=>{
-
-      if(lat && lng){
-
+  useEffect(() => {
+    const i = setInterval(() => {
+      if (lat && lng) {
         calculate();
-
       }
+    }, 5000);
 
-    },5000);
-
-    return ()=>clearInterval(i);
-
+    return () => clearInterval(i);
   });
 
   /* ================= CAMERA ================= */
 
-  const startCamera=async()=>{
-
-    try{
-
-      const stream=
+  const startCamera = async () => {
+    try {
+      const stream =
         await navigator.mediaDevices.getUserMedia({
-
-          video:{
-            facingMode:"environment"
-          }
-
+          video: {
+            facingMode: "environment",
+          },
         });
 
-      if(videoRef.current){
-
-        videoRef.current.srcObject=stream;
-
+      if (videoRef.current) {
+        videoRef.current.srcObject =
+          stream;
       }
-
-    }catch{
-
+    } catch {
       alert("Camera not supported");
-
     }
-
   };
 
   /* ================= WEATHER ================= */
 
-  const fetchWeather=async(
-    la:number,
-    lo:number
-  )=>{
+  const fetchWeather = async (
+    la: number,
+    lo: number
+  ) => {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&hourly=cloudcover&forecast_days=1`;
 
-    try{
+      const res = await fetch(url);
 
-      const url=
-`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&hourly=cloudcover&forecast_days=1`;
+      const json = await res.json();
 
-      const res=await fetch(url);
-
-      const json=await res.json();
-
-      const c=
+      const c =
         json.hourly?.cloudcover?.[0] ?? 0;
 
       setClouds(c);
-
-    }catch{}
-
+    } catch {}
   };
 
   /* ================= NASA ================= */
 
-  const fetchNASA=async()=>{
-
-    try{
-
-      const res=await fetch(
-"https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
+  const fetchNASA = async () => {
+    try {
+      const res = await fetch(
+        "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
       );
 
-      const json=await res.json();
+      const json = await res.json();
 
       setNasa(json);
-
-    }catch{}
-
+    } catch {}
   };
 
   /* ================= CALCULATE ================= */
 
-  const calculate=async()=>{
+  const calculate = async () => {
+    const d = new Date(dt);
 
-    const d=new Date(dt);
+    const la = Number(lat);
 
-    const la=Number(lat);
+    const lo = Number(lng);
 
-    const lo=Number(lng);
+    const moon =
+      SunCalc.getMoonPosition(
+        d,
+        la,
+        lo
+      );
 
-    const moon=
-      SunCalc.getMoonPosition(d,la,lo);
+    const sun = SunCalc.getPosition(
+      d,
+      la,
+      lo
+    );
 
-    const sun=
-      SunCalc.getPosition(d,la,lo);
-
-    const illum=
+    const illum =
       SunCalc.getMoonIllumination(d);
 
-    const times=
-      SunCalc.getTimes(d,la,lo);
+    const times = SunCalc.getTimes(
+      d,
+      la,
+      lo
+    );
 
-    const mt=
-      SunCalc.getMoonTimes(d,la,lo);
+    const mt = SunCalc.getMoonTimes(
+      d,
+      la,
+      lo
+    );
 
-    const alt=
-      rad2deg(moon.altitude);
+    const alt = rad2deg(
+      moon.altitude
+    );
 
-    const az=
-      rad2deg(moon.azimuth)+180;
+    const az =
+      rad2deg(moon.azimuth) + 180;
 
-    const sunAlt=
-      rad2deg(sun.altitude);
+    const sunAlt = rad2deg(
+      sun.altitude
+    );
 
-    const lag=
+    const lag =
       mt.set && times.sunset
-      ? (mt.set.getTime()-times.sunset.getTime())/60000
-      :0;
+        ? (mt.set.getTime() -
+            times.sunset.getTime()) /
+          60000
+        : 0;
 
-    const elong=
-      illum.phase*360;
+    const elong = illum.phase * 360;
 
-    const arcv=
-      alt-sunAlt;
+    const arcv = alt - sunAlt;
 
     setData({
+      alt: alt.toFixed(2),
 
-      alt:alt.toFixed(2),
+      az: az.toFixed(2),
 
-      az:az.toFixed(2),
+      illum: (
+        illum.fraction * 100
+      ).toFixed(1),
 
-      illum:(illum.fraction*100).toFixed(1),
+      illumRaw: illum.fraction,
 
-      illumRaw:illum.fraction,
+      age: (
+        illum.phase * 29.53
+      ).toFixed(1),
 
-      age:(illum.phase*29.53).toFixed(1),
+      sunset: localTime(
+        times.sunset
+      ),
 
-      sunset:localTime(times.sunset),
+      moonset: localTime(mt.set),
 
-      moonset:localTime(mt.set),
+      lag: lag.toFixed(1),
 
-      lag:lag.toFixed(1),
+      elong: elong.toFixed(1),
 
-      elong:elong.toFixed(1),
+      arcv: arcv.toFixed(1),
 
-      arcv:arcv.toFixed(1),
-
-      vis:visibility(
+      vis: visibility(
         arcv,
         lag,
         elong
-      )
-
+      ),
     });
 
-    fetchWeather(la,lo);
+    fetchWeather(la, lo);
 
     fetchNASA();
-
   };
 
   /* ================= UI HELPERS ================= */
 
-  const direction=
-    data
-    ? (Number(data.az)-heading+360)%360
-    :0;
+  const direction = data
+    ? (Number(data.az) -
+        heading +
+        360) %
+      360
+    : 0;
 
-  const resultColor=
+  const resultColor =
     data?.vis.includes("✅")
       ? "#22c55e"
       : data?.vis.includes("⚠️")
@@ -305,350 +318,317 @@ export default function Page(){
 
   /* ================= UI ================= */
 
-  return(
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
 
-    <div style={{
+        background:
+          "radial-gradient(circle at top,#020617,#000)",
 
-      minHeight:"100vh",
+        color: "white",
 
-      background:
-"radial-gradient(circle at top,#020617,#000)",
+        display: "flex",
 
-      color:"white",
+        flexDirection: "column",
 
-      display:"flex",
+        alignItems: "center",
 
-      flexDirection:"column",
+        padding: 20,
 
-      alignItems:"center",
+        textAlign: "center",
 
-      padding:20,
-
-      textAlign:"center",
-
-      fontFamily:"system-ui"
-
-    }}>
-
+        fontFamily: "system-ui",
+      }}
+    >
       {/* TITLE */}
 
-      <h1 style={{
-        fontSize:32,
-        marginBottom:10
-      }}>
+      <h1
+        style={{
+          fontSize: 34,
+          marginBottom: 16,
+        }}
+      >
         🌙 Hilal Pro
       </h1>
 
       {/* INPUT CARD */}
 
-      <div style={{
+      <div
+        style={{
+          width: 360,
 
-        width:350,
+          background: "#0f172a",
 
-        background:"#0f172a",
+          padding: 22,
 
-        padding:20,
+          borderRadius: 28,
 
-        borderRadius:24,
-
-        boxShadow:
-"0 0 40px rgba(37,99,235,0.35)"
-
-      }}>
-
+          boxShadow:
+            "0 0 40px rgba(37,99,235,0.35)",
+        }}
+      >
         <input
           value={lat}
-          onChange={e=>setLat(e.target.value)}
+          onChange={(e) =>
+            setLat(e.target.value)
+          }
           placeholder="Latitude"
           style={{
-            width:"100%",
-            padding:12,
-            marginBottom:10
+            width: "100%",
+            padding: 14,
+            marginBottom: 12,
+            borderRadius: 14,
+            border: "none",
           }}
         />
 
         <input
           value={lng}
-          onChange={e=>setLng(e.target.value)}
+          onChange={(e) =>
+            setLng(e.target.value)
+          }
           placeholder="Longitude"
           style={{
-            width:"100%",
-            padding:12,
-            marginBottom:10
+            width: "100%",
+            padding: 14,
+            marginBottom: 12,
+            borderRadius: 14,
+            border: "none",
           }}
         />
 
         <input
           type="datetime-local"
           value={dt}
-          onChange={e=>setDt(e.target.value)}
+          onChange={(e) =>
+            setDt(e.target.value)
+          }
           style={{
-            width:"100%",
-            padding:12,
-            marginBottom:12
+            width: "100%",
+            padding: 14,
+            marginBottom: 16,
+            borderRadius: 14,
+            border: "none",
           }}
         />
 
         <button
           onClick={calculate}
           style={{
+            width: "100%",
 
-            width:"100%",
+            padding: 16,
 
-            padding:15,
+            borderRadius: 18,
 
-            borderRadius:16,
+            border: "none",
 
-            border:"none",
+            background: "#2563eb",
 
-            background:"#2563eb",
+            color: "white",
 
-            color:"white",
+            fontWeight: "bold",
 
-            fontWeight:"bold",
+            fontSize: 20,
 
-            fontSize:18,
-
-            cursor:"pointer"
-
+            cursor: "pointer",
           }}
         >
           🔭 احسب
         </button>
-
       </div>
 
       {/* RESULTS */}
 
       {data && (
+        <div
+          style={{
+            width: 360,
 
-        <div style={{
+            marginTop: 22,
 
-          width:350,
+            background: "#0f172a",
 
-          marginTop:20,
+            padding: 22,
 
-          background:"#0f172a",
+            borderRadius: 28,
 
-          padding:20,
-
-          borderRadius:24,
-
-          boxShadow:
-"0 0 35px rgba(0,0,0,0.5)"
-
-        }}>
-
-          {/* LOCATION */}
-
+            boxShadow:
+              "0 0 35px rgba(0,0,0,0.5)",
+          }}
+        >
           <h3>📍 موقع الراصد</h3>
 
-          <p>{lat}, {lng}</p>
-
           <p>
-            {toDMS(Number(lat),"lat")}
-            {" , "}
-            {toDMS(Number(lng),"lng")}
+            {lat}, {lng}
           </p>
 
-          {/* MOON */}
+          <p>
+            {toDMS(
+              Number(lat),
+              "lat"
+            )}{" "}
+            ,{" "}
+            {toDMS(
+              Number(lng),
+              "lng"
+            )}
+          </p>
 
           <h3>🌙 القمر</h3>
 
-          <p>الارتفاع: {data.alt}°</p>
+          <p>
+            الارتفاع: {data.alt}°
+          </p>
 
-          <p>الاتجاه: {data.az}°</p>
+          <p>
+            الاتجاه: {data.az}°
+          </p>
 
-          <p>الإضاءة: {data.illum}%</p>
+          <p>
+            الإضاءة: {data.illum}%
+          </p>
 
-          <p>العمر: {data.age} يوم</p>
-
-          {/* TIMES */}
+          <p>
+            العمر: {data.age} يوم
+          </p>
 
           <h3>🌇 الأوقات</h3>
 
-          <p>غروب الشمس: {data.sunset}</p>
+          <p>
+            غروب الشمس:{" "}
+            {data.sunset}
+          </p>
 
-          <p>غروب القمر: {data.moonset}</p>
+          <p>
+            غروب القمر:{" "}
+            {data.moonset}
+          </p>
 
-          <p>المكث: {data.lag} دقيقة</p>
-
-          {/* VISIBILITY */}
+          <p>
+            المكث: {data.lag} دقيقة
+          </p>
 
           <h3>📊 معيار عودة</h3>
 
-          <div style={{
+          <div
+            style={{
+              background:
+                resultColor,
 
-            background:resultColor,
+              padding:
+                "14px 18px",
 
-            padding:"14px 18px",
+              borderRadius: 16,
 
-            borderRadius:16,
+              fontWeight: "bold",
 
-            fontWeight:"bold",
+              fontSize: 24,
 
-            fontSize:22,
-
-            marginBottom:16
-
-          }}>
+              marginBottom: 16,
+            }}
+          >
             {data.vis}
           </div>
 
-          <p>الاستطالة: {data.elong}°</p>
+          <p>
+            الاستطالة:{" "}
+            {data.elong}°
+          </p>
 
-          <p>ARCV: {data.arcv}</p>
-
-          {/* REAL MOON */}
+          <p>
+            ARCV: {data.arcv}
+          </p>
 
           <h3>🌙 شكل الهلال</h3>
 
-          <div style={{
+          <div
+            style={{
+              width: 110,
 
-            width:110,
+              height: 110,
 
-            height:110,
+              margin: "auto",
 
-            margin:"auto",
+              borderRadius: "50%",
 
-            borderRadius:"50%",
-
-            background:
-`linear-gradient(
+              background: `linear-gradient(
 90deg,
-#111 ${100-data.illumRaw*100}%,
-white ${100-data.illumRaw*100}%
+#111 ${
+                100 -
+                data.illumRaw * 100
+              }%,
+white ${
+                100 -
+                data.illumRaw * 100
+              }%
 )`,
 
-            boxShadow:
-"0 0 25px rgba(255,255,255,0.4)"
+              boxShadow:
+                "0 0 25px rgba(255,255,255,0.4)",
+            }}
+          />
 
-          }}/>
-
-          {/* COMPASS */}
-
-          <h3 style={{marginTop:20}}>
+          <h3
+            style={{
+              marginTop: 22,
+            }}
+          >
             🧭 البوصلة
           </h3>
 
-          <div style={{
+          <div
+            style={{
+              width: 150,
 
-            width:150,
+              height: 150,
 
-            height:150,
+              margin: "auto",
 
-            margin:"auto",
+              borderRadius: "50%",
 
-            borderRadius:"50%",
+              border:
+                "4px solid #2563eb",
 
-            border:"4px solid #2563eb",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
 
-            position:"relative"
+                top: "50%",
 
-          }}>
+                left: "50%",
 
-            <div style={{
+                transform: `translate(-50%,-50%) rotate(${direction}deg)`,
 
-              position:"absolute",
-
-              top:"50%",
-
-              left:"50%",
-
-              transform:
-`translate(-50%,-50%) rotate(${direction}deg)`,
-
-              fontSize:42
-
-            }}>
+                fontSize: 42,
+              }}
+            >
               ↑
             </div>
-
           </div>
 
-          {/* SKY MAP */}
-
-          <h3 style={{marginTop:22}}>
-            🌌 خريطة السماء
-          </h3>
-
-          <div style={{
-
-            height:170,
-
-            borderRadius:20,
-
-            background:
-"linear-gradient(#020617,#111827)",
-
-            position:"relative",
-
-            overflow:"hidden"
-
-          }}>
-
-            {[...Array(50)].map((_,i)=>(
-
-              <div
-                key={i}
-                style={{
-
-                  width:2,
-
-                  height:2,
-
-                  background:"white",
-
-                  borderRadius:"50%",
-
-                  position:"absolute",
-
-                  top:`${Math.random()*100}%`,
-
-                  left:`${Math.random()*100}%`
-
-                }}
-              />
-
-            ))}
-
-            <div style={{
-
-              width:18,
-
-              height:18,
-
-              borderRadius:"50%",
-
-              background:"white",
-
-              position:"absolute",
-
-              bottom:`${data.alt}%`,
-
-              left:`${data.az/3}%`,
-
-              boxShadow:"0 0 18px white"
-
-            }}/>
-
-          </div>
-
-          {/* WEATHER */}
-
-          <h3 style={{marginTop:22}}>
+          <h3
+            style={{
+              marginTop: 24,
+            }}
+          >
             ☁️ الطقس
           </h3>
 
           <p>
-            نسبة الغيوم:
-            {" "}
+            نسبة الغيوم:{" "}
             {clouds ?? "-"}%
           </p>
 
-          {/* CAMERA */}
-
-          <h3 style={{marginTop:22}}>
+          <h3
+            style={{
+              marginTop: 24,
+            }}
+          >
             📷 AR
           </h3>
 
@@ -657,48 +637,42 @@ white ${100-data.illumRaw*100}%
             autoPlay
             playsInline
             style={{
-
-              width:"100%",
-
-              borderRadius:18,
-
-              background:"#000"
-
+              width: "100%",
+              borderRadius: 18,
+              background: "#000",
             }}
           />
 
           <button
             onClick={startCamera}
             style={{
+              marginTop: 12,
 
-              marginTop:10,
+              width: "100%",
 
-              width:"100%",
+              padding: 14,
 
-              padding:12,
+              borderRadius: 14,
 
-              borderRadius:14,
+              border: "none",
 
-              border:"none",
+              background: "#16a34a",
 
-              background:"#16a34a",
+              color: "white",
 
-              color:"white",
-
-              fontWeight:"bold"
-
+              fontWeight: "bold",
             }}
           >
             📷 تشغيل الكاميرا
           </button>
 
-          {/* NASA */}
-
           {nasa && (
-
             <>
-
-              <h3 style={{marginTop:24}}>
+              <h3
+                style={{
+                  marginTop: 24,
+                }}
+              >
                 🛰️ NASA
               </h3>
 
@@ -706,53 +680,42 @@ white ${100-data.illumRaw*100}%
                 src={nasa.url}
                 alt="NASA"
                 style={{
-
-                  width:"100%",
-
-                  borderRadius:18
-
+                  width: "100%",
+                  borderRadius: 18,
                 }}
               />
 
-              <p style={{
-                marginTop:10,
-                fontSize:13,
-                opacity:0.8
-              }}>
+              <p
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  opacity: 0.8,
+                }}
+              >
                 {nasa.title}
               </p>
-
             </>
-
           )}
 
-          {/* MAP */}
-
-          <h3 style={{marginTop:24}}>
+          <h3
+            style={{
+              marginTop: 24,
+            }}
+          >
             🌍 الخريطة العالمية
           </h3>
 
           <iframe
-
             width="100%"
-
             height="220"
-
             style={{
-              borderRadius:18,
-              border:"none"
+              borderRadius: 18,
+              border: "none",
             }}
-
             src={`https://maps.google.com/maps?q=${lat},${lng}&z=4&output=embed`}
-
           />
-
         </div>
-
       )}
-
     </div>
-
   );
-
 }
