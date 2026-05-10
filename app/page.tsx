@@ -3,22 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import SunCalc from "suncalc";
 
-/* =========================
-   HELPERS
-========================= */
+/* ================= HELPERS ================= */
 
-const rad2deg = (r:number)=> r*180/Math.PI;
+const rad2deg = (r:number)=> r * 180 / Math.PI;
 
 function toDMS(v:number,type:"lat"|"lng"){
+
   const dir=
     type==="lat"
-      ? v>=0?"N":"S"
-      : v>=0?"E":"W";
+      ? v>=0 ? "N" : "S"
+      : v>=0 ? "E" : "W";
 
   const a=Math.abs(v);
 
   const d=Math.floor(a);
+
   const m=Math.floor((a-d)*60);
+
   const s=(((a-d)*60-m)*60).toFixed(1);
 
   return `${d}°${m}'${s}" ${dir}`;
@@ -36,9 +37,7 @@ function localTime(date?:Date){
 
 }
 
-/* =========================
-   VISIBILITY
-========================= */
+/* ================= VISIBILITY ================= */
 
 function visibility(
   arcv:number,
@@ -47,28 +46,43 @@ function visibility(
 ){
 
   if(lag>40 && arcv>10 && elong>10){
+
     return "✅ مرئي";
+
   }
 
   if(lag>20 && arcv>6){
+
     return "⚠️ صعب";
+
   }
 
   return "❌ غير مرئي";
+
 }
 
-/* =========================
-   PAGE
-========================= */
+/* ================= PAGE ================= */
 
 export default function Page(){
 
+  /* ===== LOCAL TIME FIX ===== */
+
+  const now = new Date();
+
+  const localDateTime =
+    new Date(
+      now.getTime() - now.getTimezoneOffset() * 60000
+    )
+      .toISOString()
+      .slice(0,16);
+
+  /* ===== STATES ===== */
+
   const [lat,setLat]=useState("");
+
   const [lng,setLng]=useState("");
 
-  const [dt,setDt]=useState(
-    new Date().toISOString().slice(0,16)
-  );
+  const [dt,setDt]=useState(localDateTime);
 
   const [data,setData]=useState<any>(null);
 
@@ -80,37 +94,31 @@ export default function Page(){
 
   const videoRef=useRef<HTMLVideoElement>(null);
 
-  /* =========================
-     GPS + COMPASS
-  ========================= */
+  /* ================= GPS + COMPASS ================= */
 
   useEffect(()=>{
 
     navigator.geolocation?.getCurrentPosition(p=>{
 
       setLat(p.coords.latitude.toFixed(6));
+
       setLng(p.coords.longitude.toFixed(6));
 
     });
 
-    window.addEventListener(
-      "deviceorientation",
-      (e)=>{
+    window.addEventListener("deviceorientation",(e)=>{
 
-        if(e.alpha!=null){
+      if(e.alpha!=null){
 
-          setHeading(360-e.alpha);
-
-        }
+        setHeading(360-e.alpha);
 
       }
-    );
+
+    });
 
   },[]);
 
-  /* =========================
-     LIVE TRACKING
-  ========================= */
+  /* ================= LIVE TRACKING ================= */
 
   useEffect(()=>{
 
@@ -128,9 +136,7 @@ export default function Page(){
 
   });
 
-  /* =========================
-     CAMERA
-  ========================= */
+  /* ================= CAMERA ================= */
 
   const startCamera=async()=>{
 
@@ -159,9 +165,7 @@ export default function Page(){
 
   };
 
-  /* =========================
-     WEATHER
-  ========================= */
+  /* ================= WEATHER ================= */
 
   const fetchWeather=async(
     la:number,
@@ -186,9 +190,7 @@ export default function Page(){
 
   };
 
-  /* =========================
-     NASA APOD
-  ========================= */
+  /* ================= NASA ================= */
 
   const fetchNASA=async()=>{
 
@@ -206,15 +208,14 @@ export default function Page(){
 
   };
 
-  /* =========================
-     CALCULATE
-  ========================= */
+  /* ================= CALCULATE ================= */
 
   const calculate=async()=>{
 
     const d=new Date(dt);
 
     const la=Number(lat);
+
     const lo=Number(lng);
 
     const moon=
@@ -288,9 +289,7 @@ export default function Page(){
 
   };
 
-  /* =========================
-     UI HELPERS
-  ========================= */
+  /* ================= UI HELPERS ================= */
 
   const direction=
     data
@@ -304,9 +303,7 @@ export default function Page(){
       ? "#f59e0b"
       : "#ef4444";
 
-  /* =========================
-     UI
-  ========================= */
+  /* ================= UI ================= */
 
   return(
 
@@ -336,11 +333,8 @@ export default function Page(){
       {/* TITLE */}
 
       <h1 style={{
-
         fontSize:32,
-
         marginBottom:10
-
       }}>
         🌙 Hilal Pro
       </h1>
@@ -732,7 +726,7 @@ white ${100-data.illumRaw*100}%
 
           )}
 
-          {/* WORLD MAP */}
+          {/* MAP */}
 
           <h3 style={{marginTop:24}}>
             🌍 الخريطة العالمية
