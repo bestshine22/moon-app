@@ -10,12 +10,14 @@ function ageText(hours: number) {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
+
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
 function crescentWidthArcMin(elongDeg: number) {
   const moonSemiDiameterArcMin = 16.0;
   const e = (elongDeg * Math.PI) / 180;
+
   return moonSemiDiameterArcMin * (1 - Math.cos(e));
 }
 
@@ -74,14 +76,47 @@ function moonData(
 ) {
   const time = new Astronomy.AstroTime(date);
 
-  const moonEq = Astronomy.Equator("Moon", time, observer, true, true);
-  const moonHor = Astronomy.Horizon(time, observer, moonEq.ra, moonEq.dec, "normal");
+  const moonEq = Astronomy.Equator(
+    Astronomy.Body.Moon,
+    time,
+    observer,
+    true,
+    true
+  );
 
-  const sunEq = Astronomy.Equator("Sun", time, observer, true, true);
-  const sunHor = Astronomy.Horizon(time, observer, sunEq.ra, sunEq.dec, "normal");
+  const moonHor = Astronomy.Horizon(
+    time,
+    observer,
+    moonEq.ra,
+    moonEq.dec,
+    "normal"
+  );
 
-  const elongation = Astronomy.AngleFromSun("Moon", time);
-  const illumination = Astronomy.Illumination("Moon", time);
+  const sunEq = Astronomy.Equator(
+    Astronomy.Body.Sun,
+    time,
+    observer,
+    true,
+    true
+  );
+
+  const sunHor = Astronomy.Horizon(
+    time,
+    observer,
+    sunEq.ra,
+    sunEq.dec,
+    "normal"
+  );
+
+  const elongation = Astronomy.AngleFromSun(
+    Astronomy.Body.Moon,
+    time
+  );
+
+  const illumination = Astronomy.Illumination(
+    Astronomy.Body.Moon,
+    time
+  );
 
   const ageHours = (date.getTime() - newMoon.getTime()) / 3600000;
   const illumPercent = illumination.phase_fraction * 100;
@@ -147,7 +182,7 @@ function findBest(observer: Astronomy.Observer) {
     );
 
     const sunsetTime = Astronomy.SearchRiseSet(
-      "Sun",
+      Astronomy.Body.Sun,
       observer,
       -1,
       new Astronomy.AstroTime(dayStart),
@@ -159,7 +194,7 @@ function findBest(observer: Astronomy.Observer) {
     const sunset = sunsetTime.date;
 
     const moonsetTime = Astronomy.SearchRiseSet(
-      "Moon",
+      Astronomy.Body.Moon,
       observer,
       -1,
       new Astronomy.AstroTime(sunset),
@@ -175,7 +210,6 @@ function findBest(observer: Astronomy.Observer) {
 
     for (let minute = 8; minute <= Math.min(75, lag - 3); minute += 2) {
       const t = new Date(sunset.getTime() + minute * 60000);
-
       const info = moonData(t, observer, newMoon, lag);
 
       const altitude = info.numeric.altitude;
