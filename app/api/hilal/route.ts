@@ -13,122 +13,30 @@ function ageText(hours: number) {
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
-function crescentWidthArcMin(elongDeg: number) {
-  const moonSemiDiameterArcMin = 16.0;
-  const e = (elongDeg * Math.PI) / 180;
-  return moonSemiDiameterArcMin * (1 - Math.cos(e));
-}
-
-function odehValue(arcv: number, width: number) {
-  return arcv - (7.1651 - 6.3226 * width + 0.7319 * width ** 2 - 0.1018 * width ** 3);
-}
-
-function odehResult(v: number) {
-  if (v >= 5.65) {
-    return {
-      text: "مرئي بالعين المجردة بسهولة حسب معيار عودة",
-      level: "good",
-      symbol: "✅",
-    };
-  }
-
-  if (v >= 2.0) {
-    return {
-      text: "مرئي بالعين المجردة بصعوبة حسب معيار عودة",
-      level: "medium",
-      symbol: "⚠️",
-    };
-  }
-
-  if (v >= -0.96) {
-    return {
-      text: "قد يحتاج منظارًا حسب معيار عودة",
-      level: "optical",
-      symbol: "🔭",
-    };
-  }
-
-  return {
-    text: "غير مرئي حسب معيار عودة",
-    level: "bad",
-    symbol: "❌",
-  };
-}
-
-function moonData(
-  date: Date,
-  observer: Astronomy.Observer,
-  newMoon: Date,
-  lag: number
-) {
+function moonCalc(date: Date, observer: Astronomy.Observer, newMoon: Date) {
   const time = new Astronomy.AstroTime(date);
 
-  const moonEq = Astronomy.Equator(
-    Astronomy.Body.Moon,
-    time,
-    observer,
-    true,
-    true
-  );
-
-  const moonHor = Astronomy.Horizon(
-    time,
-    observer,
-    moonEq.ra,
-    moonEq.dec,
-    "normal"
-  );
-
-  const sunEq = Astronomy.Equator(
-    Astronomy.Body.Sun,
-    time,
-    observer,
-    true,
-    true
-  );
-
-  const sunHor = Astronomy.Horizon(
-    time,
-    observer,
-    sunEq.ra,
-    sunEq.dec,
-    "normal"
-  );
+  const moonEq = Astronomy.Equator(Astronomy.Body.Moon, time, observer, true, true);
+  const moonHor = Astronomy.Horizon(time, observer, moonEq.ra, moonEq.dec, "normal");
 
   const elongation = Astronomy.AngleFromSun(Astronomy.Body.Moon, time);
   const illumination = Astronomy.Illumination(Astronomy.Body.Moon, time);
-
   const ageHours = (date.getTime() - newMoon.getTime()) / 3600000;
-  const illumPercent = illumination.phase_fraction * 100;
-
-  const arcv = moonHor.altitude - sunHor.altitude;
-  const width = crescentWidthArcMin(elongation);
-  const odeh = odehValue(arcv, width);
-  const odehStatus = odehResult(odeh);
 
   return {
     iso: date.toISOString(),
     azimuth: fmt(moonHor.azimuth),
     altitude: fmt(moonHor.altitude),
-    ageHours: fmt(ageHours),
     ageText: ageText(ageHours),
+    ageHours: fmt(ageHours),
     elongation: fmt(elongation),
-    illumination: fmt(illumPercent),
-    arcv: fmt(arcv),
-    width: fmt(width),
-    odehValue: fmt(odeh),
-    odehText: odehStatus.text,
-    odehSymbol: odehStatus.symbol,
-    visibility: odehStatus.text,
-    visibilityLevel: odehStatus.level,
+    illumination: fmt(illumination.phase_fraction * 100),
     numeric: {
       altitude: moonHor.altitude,
-      elongation,
-      illumination: illumPercent,
+      azimuth: moonHor.azimuth,
       ageHours,
-      arcv,
-      width,
-      odeh,
+      elongation,
+      illumination: illumination.phase_fraction * 100,
     },
   };
 }
@@ -136,29 +44,21 @@ function moonData(
 function findBest(observer: Astronomy.Observer) {
   const now = new Date();
 
-  const newMoonTime = Astronomy.SearchMoonPhase(
+  const newMoon = Astronomy.SearchMoonPhase(
     0,
     new Astronomy.AstroTime(now),
     40
-  );
+  ).date;
 
-  const newMoon = newMoonTime.date;
   let best: any = null;
 
   for (let day = 0; day <= 3; day++) {
     const d = new Date(newMoon);
     d.setDate(d.getDate() + day);
 
-    const dayStart = new Date(
-      d.getFullYear(),
-      d.getMonth(),
-      d.getDate(),
-      0,
-      0,
-      0
-    );
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
 
-    const sunsetTime = Astronomy.SearchRiseSet(
+    const sunsetEvent = Astronomy.SearchRiseSet(
       Astronomy.Body.Sun,
       observer,
       -1,
@@ -166,11 +66,11 @@ function findBest(observer: Astronomy.Observer) {
       2
     );
 
-    if (!sunsetTime) continue;
+    if (!sunsetEvent) continue;
 
-    const sunset = sunsetTime.date;
+    const sunset = sunsetEvent.date;
 
-    const moonsetTime = Astronomy.SearchRiseSet(
+    const moonsetEvent = Astronomy.SearchRiseSet(
       Astronomy.Body.Moon,
       observer,
       -1,
@@ -178,45 +78,35 @@ function findBest(observer: Astronomy.Observer) {
       1
     );
 
-    if (!moonsetTime) continue;
+    if (!moonsetEvent) continue;
 
-    const moonset = moonsetTime.date;
+    const moonset = moonsetEvent.date;
     const lag = (moonset.getTime() - sunset.getTime()) / 60000;
 
-    if (lag <= 20) continue;
+    if (lag <= 0) continue;
 
-    for (let minute = 18; minute <= Math.min(75, lag - 3); minute += 2) {
+    const startMinute = 20;
+    const endMinute = Math.min(45, lag - 5);
+
+    if (endMinute <= startMinute) continue;
+
+    for (let minute = startMinute; minute <= endMinute; minute += 1) {
       const t = new Date(sunset.getTime() + minute * 60000);
-      const info = moonData(t, observer, newMoon, lag);
+      const info = moonCalc(t, observer, newMoon);
 
+      const age = info.numeric.ageHours;
       const altitude = info.numeric.altitude;
       const elongation = info.numeric.elongation;
-      const illum = info.numeric.illumination;
-      const age = info.numeric.ageHours;
-      const arcv = info.numeric.arcv;
-      const width = info.numeric.width;
-      const odeh = info.numeric.odeh;
+      const illumination = info.numeric.illumination;
 
-      if (age < 15) continue;
-      if (age > 40) continue;
-      if (altitude < 5) continue;
-      if (elongation < 9) continue;
-      if (illum > 4.5) continue;
-      if (arcv < 6) continue;
-      if (width < 0.2) continue;
-
-      const idealMinute = Math.min(45, Math.max(22, lag * 0.45));
-      const timingPenalty = Math.abs(minute - idealMinute) * 0.6;
+      if (age < 12 || age > 40) continue;
+      if (altitude < 0) continue;
 
       const score =
-        odeh * 12 +
-        altitude * 1.8 +
-        elongation * 1.4 +
-        arcv * 1.2 +
-        width * 20 +
-        lag * 0.12 -
-        illum * 0.25 -
-        timingPenalty;
+        altitude * 3 +
+        elongation * 2 +
+        illumination * 0.5 -
+        Math.abs(minute - 28) * 0.8;
 
       if (!best || score > best.score) {
         best = {
@@ -243,10 +133,7 @@ export async function GET(request: Request) {
     const observeTime = searchParams.get("observeTime");
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return NextResponse.json(
-        { error: "الإحداثيات غير صحيحة" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "الإحداثيات غير صحيحة" }, { status: 400 });
     }
 
     const observer = new Astronomy.Observer(lat, lng, 0);
@@ -254,20 +141,14 @@ export async function GET(request: Request) {
 
     if (!best) {
       return NextResponse.json({
-        error:
-          "لم يتم العثور على وقت مناسب للرؤية بالعين المجردة من هذا الموقع خلال الأيام القادمة.",
+        error: "لم يتم العثور على هلال جديد مناسب للحساب خلال الأيام القادمة.",
       });
     }
 
     let custom = null;
 
     if (observeTime) {
-      custom = moonData(
-        new Date(observeTime),
-        observer,
-        new Date(best.newMoonIso),
-        Number(best.lag)
-      );
+      custom = moonCalc(new Date(observeTime), observer, new Date(best.newMoonIso));
     }
 
     return NextResponse.json({
