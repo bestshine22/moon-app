@@ -90,6 +90,8 @@ export default function Page() {
       ? "#22c55e"
       : best?.visibilityLevel === "medium"
       ? "#f59e0b"
+      : best?.visibilityLevel === "optical"
+      ? "#60a5fa"
       : "#ef4444";
 
   return (
@@ -105,6 +107,7 @@ export default function Page() {
           <div style={styles.inputGrid}>
             <Field label="خط العرض" value={lat} setValue={setLat} />
             <Field label="خط الطول" value={lng} setValue={setLng} />
+
             <div>
               <label style={styles.label}>وقت رصدك أنت - اختياري</label>
               <input
@@ -127,10 +130,13 @@ export default function Page() {
 
             <section style={{ ...styles.greenCard, borderColor: statusColor }}>
               <div style={{ ...styles.badge, color: statusColor, borderColor: statusColor }}>
-                ✅ {best.visibility}
+                {best.odehSymbol} {best.odehText}
               </div>
 
               <div style={styles.grid}>
+                <Result label="نتيجة معيار عودة" value={`${best.odehValue}`} icon="📊" green />
+                <Result label="عرض الهلال W" value={`${best.width}′`} icon="🌙" green />
+                <Result label="ARCV" value={`${best.arcv}°`} icon="📐" green />
                 <Result label="التاريخ" value={fmtDate(best.iso)} icon="📅" green />
                 <Result label="اليوم" value={fmtDay(best.iso)} icon="🗓️" green />
                 <Result label="الساعة" value={fmtTime(best.iso)} icon="🕒" green />
@@ -144,6 +150,7 @@ export default function Page() {
 
             <section style={styles.orangeCard}>
               <h2 style={styles.sectionTitle}>🌅 معلومات الغروب</h2>
+
               <div style={styles.grid3}>
                 <Result label="غروب الشمس" value={fmtTime(result.best.sunsetIso)} icon="🌇" orange />
                 <Result label="غروب القمر" value={fmtTime(result.best.moonsetIso)} icon="🌙" orange />
@@ -156,7 +163,12 @@ export default function Page() {
         {custom && (
           <section style={styles.blueCard}>
             <h2 style={styles.sectionTitle}>🕒 نتائج وقت رصدك</h2>
+
             <div style={styles.grid}>
+              <Result label="نتيجة معيار عودة" value={`${custom.odehValue}`} icon="📊" blue />
+              <Result label="حالة الرؤية" value={custom.odehText} icon="👁️" blue />
+              <Result label="عرض الهلال W" value={`${custom.width}′`} icon="🌙" blue />
+              <Result label="ARCV" value={`${custom.arcv}°`} icon="📐" blue />
               <Result label="التاريخ" value={fmtDate(custom.iso)} icon="📅" blue />
               <Result label="اليوم" value={fmtDay(custom.iso)} icon="🗓️" blue />
               <Result label="الساعة" value={fmtTime(custom.iso)} icon="🕒" blue />
@@ -165,13 +177,12 @@ export default function Page() {
               <Result label="عمر الهلال" value={custom.ageText} icon="☾" blue />
               <Result label="الاستطالة" value={`${custom.elongation}°`} icon="☼" blue />
               <Result label="الإضاءة" value={`${custom.illumination}%`} icon="🌙" blue />
-              <Result label="حالة الرؤية" value={custom.visibility} icon="👁️" blue />
             </div>
           </section>
         )}
 
         <div style={styles.note}>
-          ℹ️ هذه الحسابات فلكية دقيقة وتعتمد على موقعك والوقت المحدد. قد تتأثر الرؤية بالغيوم والغبار والأفق.
+          ℹ️ الحساب يستخدم معيار عودة اعتمادًا على ARCV وعرض الهلال W. تبقى الرؤية العملية متأثرة بصفاء الجو والغبار والأفق.
         </div>
       </div>
     </main>
@@ -208,25 +219,11 @@ const styles: Record<string, React.CSSProperties> = {
     direction: "rtl",
     padding: 14,
   },
-  container: {
-    maxWidth: 980,
-    margin: "0 auto",
-  },
-  header: {
-    textAlign: "center",
-    padding: "18px 0",
-  },
-  moon: {
-    fontSize: 70,
-  },
-  title: {
-    fontSize: 42,
-    margin: 0,
-  },
-  subtitle: {
-    opacity: 0.75,
-    fontSize: 18,
-  },
+  container: { maxWidth: 980, margin: "0 auto" },
+  header: { textAlign: "center", padding: "18px 0" },
+  moon: { fontSize: 70 },
+  title: { fontSize: 42, margin: 0 },
+  subtitle: { opacity: 0.75, fontSize: 18 },
   inputCard: {
     background: "rgba(15,23,42,.92)",
     border: "1px solid rgba(255,255,255,.12)",
@@ -240,12 +237,7 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
     gap: 18,
   },
-  label: {
-    display: "block",
-    marginBottom: 8,
-    fontSize: 18,
-    fontWeight: "bold",
-  },
+  label: { display: "block", marginBottom: 8, fontSize: 18, fontWeight: "bold" },
   input: {
     width: "100%",
     padding: 16,
@@ -303,10 +295,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: "bold",
   },
-  sectionTitle: {
-    fontSize: 28,
-    marginTop: 0,
-  },
+  sectionTitle: { fontSize: 28, marginTop: 0 },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
@@ -324,18 +313,9 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     minHeight: 110,
   },
-  resultLabel: {
-    opacity: 0.78,
-    fontSize: 16,
-  },
-  icon: {
-    fontSize: 28,
-    margin: "8px 0",
-  },
-  resultValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
+  resultLabel: { opacity: 0.78, fontSize: 16 },
+  icon: { fontSize: 28, margin: "8px 0" },
+  resultValue: { fontSize: 24, fontWeight: "bold" },
   note: {
     border: "1px solid #3b82f6",
     borderRadius: 18,

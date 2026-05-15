@@ -10,61 +10,48 @@ function ageText(hours: number) {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
 function crescentWidthArcMin(elongDeg: number) {
   const moonSemiDiameterArcMin = 16.0;
   const e = (elongDeg * Math.PI) / 180;
-
   return moonSemiDiameterArcMin * (1 - Math.cos(e));
 }
 
-function visibilityStatus(
-  altitude: number,
-  elongation: number,
-  illumination: number,
-  lag: number,
-  ageHours: number,
-  arcv: number,
-  width: number
-) {
-  if (
-    altitude >= 10 &&
-    elongation >= 12 &&
-    illumination >= 0.8 &&
-    illumination <= 3.5 &&
-    lag >= 35 &&
-    ageHours >= 18 &&
-    ageHours <= 36 &&
-    arcv >= 10 &&
-    width >= 0.35
-  ) {
+function odehValue(arcv: number, width: number) {
+  return arcv - (7.1651 - 6.3226 * width + 0.7319 * width ** 2 - 0.1018 * width ** 3);
+}
+
+function odehResult(v: number) {
+  if (v >= 5.65) {
     return {
-      text: "مناسب للرؤية بالعين المجردة",
+      text: "مرئي بالعين المجردة بسهولة حسب معيار عودة",
       level: "good",
+      symbol: "✅",
     };
   }
 
-  if (
-    altitude >= 7 &&
-    elongation >= 10 &&
-    illumination <= 4.5 &&
-    lag >= 25 &&
-    ageHours >= 15 &&
-    arcv >= 7 &&
-    width >= 0.25
-  ) {
+  if (v >= 2.0) {
     return {
-      text: "ممكن بصعوبة بالعين المجردة",
+      text: "مرئي بالعين المجردة بصعوبة حسب معيار عودة",
       level: "medium",
+      symbol: "⚠️",
+    };
+  }
+
+  if (v >= -0.96) {
+    return {
+      text: "قد يحتاج منظارًا حسب معيار عودة",
+      level: "optical",
+      symbol: "🔭",
     };
   }
 
   return {
-    text: "غير مناسب للعين المجردة",
+    text: "غير مرئي حسب معيار عودة",
     level: "bad",
+    symbol: "❌",
   };
 }
 
@@ -108,30 +95,16 @@ function moonData(
     "normal"
   );
 
-  const elongation = Astronomy.AngleFromSun(
-    Astronomy.Body.Moon,
-    time
-  );
-
-  const illumination = Astronomy.Illumination(
-    Astronomy.Body.Moon,
-    time
-  );
+  const elongation = Astronomy.AngleFromSun(Astronomy.Body.Moon, time);
+  const illumination = Astronomy.Illumination(Astronomy.Body.Moon, time);
 
   const ageHours = (date.getTime() - newMoon.getTime()) / 3600000;
   const illumPercent = illumination.phase_fraction * 100;
+
   const arcv = moonHor.altitude - sunHor.altitude;
   const width = crescentWidthArcMin(elongation);
-
-  const status = visibilityStatus(
-    moonHor.altitude,
-    elongation,
-    illumPercent,
-    lag,
-    ageHours,
-    arcv,
-    width
-  );
+  const odeh = odehValue(arcv, width);
+  const odehStatus = odehResult(odeh);
 
   return {
     iso: date.toISOString(),
@@ -143,8 +116,11 @@ function moonData(
     illumination: fmt(illumPercent),
     arcv: fmt(arcv),
     width: fmt(width),
-    visibility: status.text,
-    visibilityLevel: status.level,
+    odehValue: fmt(odeh),
+    odehText: odehStatus.text,
+    odehSymbol: odehStatus.symbol,
+    visibility: odehStatus.text,
+    visibilityLevel: odehStatus.level,
     numeric: {
       altitude: moonHor.altitude,
       elongation,
@@ -152,6 +128,7 @@ function moonData(
       ageHours,
       arcv,
       width,
+      odeh,
     },
   };
 }
@@ -208,7 +185,7 @@ function findBest(observer: Astronomy.Observer) {
 
     if (lag <= 20) continue;
 
-    for (let minute = 8; minute <= Math.min(75, lag - 3); minute += 2) {
+    for (let minute = 18; minute <= Math.min(75, lag - 3); minute += 2) {
       const t = new Date(sunset.getTime() + minute * 60000);
       const info = moonData(t, observer, newMoon, lag);
 
@@ -218,6 +195,7 @@ function findBest(observer: Astronomy.Observer) {
       const age = info.numeric.ageHours;
       const arcv = info.numeric.arcv;
       const width = info.numeric.width;
+      const odeh = info.numeric.odeh;
 
       if (age < 15) continue;
       if (age > 40) continue;
@@ -227,16 +205,17 @@ function findBest(observer: Astronomy.Observer) {
       if (arcv < 6) continue;
       if (width < 0.2) continue;
 
-      const idealMinute = Math.min(45, Math.max(18, lag * 0.45));
-      const timingPenalty = Math.abs(minute - idealMinute) * 0.5;
+      const idealMinute = Math.min(45, Math.max(22, lag * 0.45));
+      const timingPenalty = Math.abs(minute - idealMinute) * 0.6;
 
       const score =
-        altitude * 3.0 +
-        elongation * 2.2 +
-        arcv * 2.0 +
-        width * 25 +
-        lag * 0.18 -
-        illum * 0.35 -
+        odeh * 12 +
+        altitude * 1.8 +
+        elongation * 1.4 +
+        arcv * 1.2 +
+        width * 20 +
+        lag * 0.12 -
+        illum * 0.25 -
         timingPenalty;
 
       if (!best || score > best.score) {
