@@ -21,15 +21,26 @@ function addMinutes(date: Date, min: number) {
   return new Date(date.getTime() + min * 60000);
 }
 
+function formatMoonAge(totalDays: number) {
+  const totalSeconds = Math.round(totalDays * 24 * 60 * 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${hours} ساعة ${minutes} دقيقة ${seconds} ثانية`;
+}
+
 function moonData(date: Date, lat: number, lng: number) {
   const moon = SunCalc.getMoonPosition(date, lat, lng);
   const illum = SunCalc.getMoonIllumination(date);
   const azimuth = (rad2deg(moon.azimuth) + 180 + 360) % 360;
+  const ageDays = illum.phase * 29.530588;
 
   return {
     altitude: rad2deg(moon.altitude).toFixed(2),
     azimuth: azimuth.toFixed(2),
-    age: (illum.phase * 29.530588).toFixed(2),
+    ageText: formatMoonAge(ageDays),
+    illumination: (illum.fraction * 100).toFixed(2),
     elongation: (illum.phase * 360).toFixed(2),
   };
 }
@@ -129,6 +140,10 @@ export default function Page() {
               <Result label="غروب الشمس" value={mainResult.sunset} />
               <Result label="غروب القمر" value={mainResult.moonset} />
               <Result label="مكث القمر" value={`${mainResult.lag} دقيقة`} />
+              <Result
+                label="درجة توجيه البوصله لرصد اتجاه القمر"
+                value={`${mainResult.bestData?.azimuth ?? "-"}°`}
+              />
             </div>
 
             <h2 style={styles.cardTitle}>⭐ أفضل وقت للرصد</h2>
@@ -136,9 +151,8 @@ export default function Page() {
             <div style={styles.highlightBox}>
               <Result label="أفضل وقت" value={mainResult.bestTime} />
               <Result label="الارتفاع" value={`${mainResult.bestData?.altitude ?? "-"}°`} />
-              <Result label="العمر" value={`${mainResult.bestData?.age ?? "-"} يوم`} />
+              <Result label="العمر" value={mainResult.bestData?.ageText ?? "-"} />
               <Result label="الاستطالة" value={`${mainResult.bestData?.elongation ?? "-"}°`} />
-              <Result label="درجة توجيه البوصلة" value={`${mainResult.bestData?.azimuth ?? "-"}°`} />
             </div>
           </section>
         )}
@@ -159,10 +173,11 @@ export default function Page() {
 
           {customResult && (
             <div style={styles.customBox}>
-              <Result label="العمر وقت رصدي" value={`${customResult.age} يوم`} />
-              <Result label="الارتفاع وقت رصدي" value={`${customResult.altitude}°`} />
+              <Result label="موقعي بالإحداثيات" value={`${lat}, ${lng}`} />
+              <Result label="عمر القمر وقت رصدي" value={customResult.ageText} />
+              <Result label="ارتفاع الهلال وقت رصدي" value={`${customResult.altitude}°`} />
+              <Result label="إضاءة الهلال وقت رصدي" value={`${customResult.illumination}%`} />
               <Result label="الاستطالة وقت رصدي" value={`${customResult.elongation}°`} />
-              <Result label="درجة توجيه البوصلة وقت رصدي" value={`${customResult.azimuth}°`} />
             </div>
           )}
         </section>
