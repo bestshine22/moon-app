@@ -1,308 +1,707 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import SunCalc from "suncalc";
-
-const rad2deg = (r: number) => (r * 180) / Math.PI;
+import * as Astronomy from "astronomy-engine";
 
 function getLocalDateTime() {
   const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+
+  return new Date(
+    now.getTime() - now.getTimezoneOffset() * 60000
+  )
     .toISOString()
     .slice(0, 16);
 }
 
 function fmtTime(date?: Date) {
   if (!date) return "-";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function addMinutes(date: Date, min: number) {
-  return new Date(date.getTime() + min * 60000);
+function fmtDate(date?: Date) {
+  if (!date) return "-";
+
+  return date.toLocaleDateString("ar-SA", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
-function formatMoonAge(totalDays: number) {
-  const totalSeconds = Math.round(totalDays * 24 * 60 * 60);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+function fmtDay(date?: Date) {
+  if (!date) return "-";
 
-  return `${hours} ساعة ${minutes} دقيقة ${seconds} ثانية`;
+  return date.toLocaleDateString("ar-SA", {
+    weekday: "long",
+  });
 }
 
-function moonData(date: Date, lat: number, lng: number) {
-  const moon = SunCalc.getMoonPosition(date, lat, lng);
-  const illum = SunCalc.getMoonIllumination(date);
-  const azimuth = (rad2deg(moon.azimuth) + 180 + 360) % 360;
-  const ageDays = illum.phase * 29.530588;
+function formatMoonAge(hours:number){
 
-  return {
-    altitude: rad2deg(moon.altitude).toFixed(2),
-    azimuth: azimuth.toFixed(2),
-    ageText: formatMoonAge(ageDays),
-    illumination: (illum.fraction * 100).toFixed(2),
-    elongation: (illum.phase * 360).toFixed(2),
-  };
+  const h=Math.floor(hours);
+
+  const m=Math.floor((hours-h)*60);
+
+  const s=Math.floor((((hours-h)*60)-m)*60);
+
+  return `${h} ساعة ${m} دقيقة ${s} ثانية`;
+
 }
 
 export default function Page() {
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [observeTime, setObserveTime] = useState(getLocalDateTime());
-  const [mainResult, setMainResult] = useState<any>(null);
-  const [customResult, setCustomResult] = useState<any>(null);
 
-  useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((pos) => {
-      setLat(pos.coords.latitude.toFixed(6));
-      setLng(pos.coords.longitude.toFixed(6));
-    });
-  }, []);
+  const [lat,setLat]=useState("");
 
-  function calculate() {
-    const la = Number(lat);
-    const lo = Number(lng);
-    const now = new Date();
+  const [lng,setLng]=useState("");
 
-    const times = SunCalc.getTimes(now, la, lo);
-    const moonTimes = SunCalc.getMoonTimes(now, la, lo);
-    const sunset = times.sunset;
-    const moonset = moonTimes.set;
+  const [observeTime,setObserveTime]=
+    useState(getLocalDateTime());
+
+  const [mainResult,setMainResult]=
+    useState<any>(null);
+
+  const [customResult,setCustomResult]=
+    useState<any>(null);
+
+  useEffect(()=>{
+
+    navigator.geolocation?.getCurrentPosition(
+
+      (pos)=>{
+
+        setLat(
+          pos.coords.latitude.toFixed(6)
+        );
+
+        setLng(
+          pos.coords.longitude.toFixed(6)
+        );
+
+      },
+
+      ()=>{},
+
+      {
+
+        enableHighAccuracy:true,
+
+        maximumAge:0,
+
+        timeout:15000
+
+      }
+
+    );
+
+  },[]);
+
+  function calculate(){
+
+    const la=Number(lat);
+
+    const lo=Number(lng);
+
+    const observer=
+      new Astronomy.Observer(
+        la,
+        lo,
+        0
+      );
+
+    const now=new Date();
+
+    const astroTime=
+      new Astronomy.AstroTime(now);
+
+    /* ===== غروب الشمس ===== */
+
+    const sunsetEvent=
+      Astronomy.SearchRiseSet(
+        "Sun",
+        observer,
+        +1,
+        astroTime,
+        1,
+        -0.833
+      );
+
+    const sunset=
+      sunsetEvent?.date;
+
+    /* ===== غروب القمر ===== */
+
+    const moonsetEvent=
+      Astronomy.SearchRiseSet(
+        "Moon",
+        observer,
+        -1,
+        astroTime,
+        1,
+        0
+      );
+
+    const moonset=
+      moonsetEvent?.date;
+
+    /* ===== المكث ===== */
 
     const lag =
-      moonset && sunset
-        ? (moonset.getTime() - sunset.getTime()) / 60000
+      sunset && moonset
+        ? (
+            moonset.getTime() -
+            sunset.getTime()
+          ) / 60000
         : 0;
 
-    let bestTime: Date | null = null;
+    /* ===== أفضل وقت ===== */
 
-    if (sunset && moonset && moonset > sunset) {
-      const bestOffset = Math.max(10, Math.min(30, lag * 0.35));
-      bestTime = addMinutes(sunset, bestOffset);
+    let bestTime:Date|null=null;
+
+    if(
+      sunset &&
+      moonset &&
+      moonset > sunset
+    ){
+
+      const bestOffset=
+        Math.max(
+          10,
+          Math.min(
+            35,
+            lag * 0.35
+          )
+        );
+
+      bestTime=
+        new Date(
+          sunset.getTime() +
+          bestOffset * 60000
+        );
+
     }
 
-    const bestData = bestTime ? moonData(bestTime, la, lo) : null;
+    if(bestTime){
 
-    setMainResult({
-      sunset: fmtTime(sunset),
-      moonset: fmtTime(moonset),
-      lag: lag.toFixed(1),
-      bestTime: bestTime ? fmtTime(bestTime) : "-",
-      bestData,
-    });
+      const result=
+        generateMoonData(
+          bestTime,
+          observer,
+          lag
+        );
+
+      setMainResult(result);
+
+    }
 
     calculateCustom();
+
   }
 
-  function calculateCustom() {
-    const la = Number(lat);
-    const lo = Number(lng);
-    const date = new Date(observeTime);
-    setCustomResult(moonData(date, la, lo));
+  function generateMoonData(
+    date:Date,
+    observer:any,
+    lag:number
+  ){
+
+    const astro=
+      new Astronomy.AstroTime(date);
+
+    /* ===== القمر ===== */
+
+    const equMoon=
+      Astronomy.Equator(
+        "Moon",
+        astro,
+        observer,
+        true,
+        true
+      );
+
+    const horMoon=
+      Astronomy.Horizon(
+        astro,
+        observer,
+        equMoon.ra,
+        equMoon.dec,
+        "normal"
+      );
+
+    /* ===== الشمس ===== */
+
+    const equSun=
+      Astronomy.Equator(
+        "Sun",
+        astro,
+        observer,
+        true,
+        true
+      );
+
+    const horSun=
+      Astronomy.Horizon(
+        astro,
+        observer,
+        equSun.ra,
+        equSun.dec,
+        "normal"
+      );
+
+    /* ===== الاستطالة ===== */
+
+    const elongation=
+      Astronomy.AngleFromSun(
+        "Moon",
+        astro
+      );
+
+    /* ===== الإضاءة ===== */
+
+    const illum=
+      Astronomy.Illumination(
+        "Moon",
+        astro
+      );
+
+    /* ===== عمر الهلال ===== */
+
+    const moonPhase=
+      Astronomy.MoonPhase(astro);
+
+    const ageHours=
+      moonPhase * 24;
+
+    return {
+
+      date:fmtDate(date),
+
+      day:fmtDay(date),
+
+      time:fmtTime(date),
+
+      azimuth:
+        horMoon.azimuth.toFixed(2),
+
+      altitude:
+        horMoon.altitude.toFixed(2),
+
+      elongation:
+        elongation.toFixed(2),
+
+      illumination:
+        illum.phase_fraction
+          .toFixed(4)
+          .replace(
+            "0.",
+            ""
+          ),
+
+      age:
+        formatMoonAge(ageHours),
+
+      lag:
+        lag.toFixed(1)
+
+    };
+
   }
 
-  return (
+  function calculateCustom(){
+
+    const la=Number(lat);
+
+    const lo=Number(lng);
+
+    const observer=
+      new Astronomy.Observer(
+        la,
+        lo,
+        0
+      );
+
+    const date=
+      new Date(observeTime);
+
+    const result=
+      generateMoonData(
+        date,
+        observer,
+        0
+      );
+
+    setCustomResult(result);
+
+  }
+
+  return(
+
     <main style={styles.page}>
+
       <div style={styles.container}>
+
         <header style={styles.header}>
-          <div style={styles.moon}>🌙</div>
-          <h1 style={styles.title}>مرصد الهلال</h1>
-          <p style={styles.subtitle}>حساب أفضل وقت واتجاه رصد الهلال حسب موقعك</p>
+
+          <div style={styles.moon}>
+            🌙
+          </div>
+
+          <h1 style={styles.title}>
+            مرصد الهلال
+          </h1>
+
+          <p style={styles.subtitle}>
+            حسابات فلكية دقيقة لرصد الهلال
+          </p>
+
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>📍 موقع الراصد</h2>
 
-          <label style={styles.label}>خط العرض</label>
+          <h2 style={styles.cardTitle}>
+            📍 موقع الراصد
+          </h2>
+
+          <label style={styles.label}>
+            خط العرض
+          </label>
+
           <input
             value={lat}
-            onChange={(e) => setLat(e.target.value)}
+            onChange={(e)=>
+              setLat(e.target.value)
+            }
             style={styles.input}
           />
 
-          <label style={styles.label}>خط الطول</label>
+          <label style={styles.label}>
+            خط الطول
+          </label>
+
           <input
             value={lng}
-            onChange={(e) => setLng(e.target.value)}
+            onChange={(e)=>
+              setLng(e.target.value)
+            }
             style={styles.input}
           />
 
-          <button onClick={calculate} style={styles.primaryButton}>
+          <button
+            onClick={calculate}
+            style={styles.primaryButton}
+          >
             🔭 احسب
           </button>
+
         </section>
 
         {mainResult && (
+
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>🌇 معلومات اليوم</h2>
 
-            <div style={styles.resultGrid}>
-              <Result label="غروب الشمس" value={mainResult.sunset} />
-              <Result label="غروب القمر" value={mainResult.moonset} />
-              <Result label="مكث القمر" value={`${mainResult.lag} دقيقة`} />
-              <Result
-                label="درجة توجيه البوصله لرصد اتجاه القمر"
-                value={`${mainResult.bestData?.azimuth ?? "-"}°`}
-              />
-            </div>
-
-            <h2 style={styles.cardTitle}>⭐ أفضل وقت للرصد</h2>
+            <h2 style={styles.cardTitle}>
+              ⭐ أفضل وقت لرصد الهلال
+            </h2>
 
             <div style={styles.highlightBox}>
-              <Result label="أفضل وقت" value={mainResult.bestTime} />
-              <Result label="الارتفاع" value={`${mainResult.bestData?.altitude ?? "-"}°`} />
-              <Result label="العمر" value={mainResult.bestData?.ageText ?? "-"} />
-              <Result label="الاستطالة" value={`${mainResult.bestData?.elongation ?? "-"}°`} />
+
+              <Result
+                label="التاريخ"
+                value={mainResult.date}
+              />
+
+              <Result
+                label="اليوم"
+                value={mainResult.day}
+              />
+
+              <Result
+                label="الساعة"
+                value={mainResult.time}
+              />
+
+              <Result
+                label="الاتجاه بالبوصلة"
+                value={`${mainResult.azimuth}°`}
+              />
+
+              <Result
+                label="الإرتفاع"
+                value={`${mainResult.altitude}°`}
+              />
+
+              <Result
+                label="العمر"
+                value={mainResult.age}
+              />
+
+              <Result
+                label="الإستطالة"
+                value={`${mainResult.elongation}°`}
+              />
+
+              <Result
+                label="المكث"
+                value={`${mainResult.lag} دقيقة`}
+              />
+
+              <Result
+                label="الإضاءة"
+                value={`${mainResult.illumination}%`}
+              />
+
             </div>
+
           </section>
+
         )}
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🕒 وقت رصدك أنت</h2>
+
+          <h2 style={styles.cardTitle}>
+            🕒 وقت رصدك أنت
+          </h2>
 
           <input
             type="datetime-local"
             value={observeTime}
-            onChange={(e) => setObserveTime(e.target.value)}
+            onChange={(e)=>
+              setObserveTime(
+                e.target.value
+              )
+            }
             style={styles.input}
           />
 
-          <button onClick={calculateCustom} style={styles.secondaryButton}>
+          <button
+            onClick={calculateCustom}
+            style={styles.secondaryButton}
+          >
             احسب وقت رصدي
           </button>
 
           {customResult && (
+
             <div style={styles.customBox}>
-              <Result label="موقعي بالإحداثيات" value={`${lat}, ${lng}`} />
-              <Result label="عمر القمر وقت رصدي" value={customResult.ageText} />
-              <Result label="ارتفاع الهلال وقت رصدي" value={`${customResult.altitude}°`} />
-              <Result label="إضاءة الهلال وقت رصدي" value={`${customResult.illumination}%`} />
-              <Result label="الاستطالة وقت رصدي" value={`${customResult.elongation}°`} />
+
+              <Result
+                label="موقعي بالإحداثيات"
+                value={`${lat}, ${lng}`}
+              />
+
+              <Result
+                label="التاريخ"
+                value={customResult.date}
+              />
+
+              <Result
+                label="اليوم"
+                value={customResult.day}
+              />
+
+              <Result
+                label="الساعة"
+                value={customResult.time}
+              />
+
+              <Result
+                label="عمر القمر"
+                value={customResult.age}
+              />
+
+              <Result
+                label="الإرتفاع"
+                value={`${customResult.altitude}°`}
+              />
+
+              <Result
+                label="الإستطالة"
+                value={`${customResult.elongation}°`}
+              />
+
+              <Result
+                label="الإضاءة"
+                value={`${customResult.illumination}%`}
+              />
+
             </div>
+
           )}
+
         </section>
+
       </div>
+
     </main>
+
   );
+
 }
 
-function Result({ label, value }: { label: string; value: string }) {
-  return (
+function Result({
+  label,
+  value
+}:{
+  label:string;
+  value:string;
+}){
+
+  return(
+
     <div style={styles.resultItem}>
-      <div style={styles.resultLabel}>{label}</div>
-      <div style={styles.resultValue}>{value}</div>
+
+      <div style={styles.resultLabel}>
+        {label}
+      </div>
+
+      <div style={styles.resultValue}>
+        {value}
+      </div>
+
     </div>
+
   );
+
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
+const styles:
+Record<string,React.CSSProperties>={
+
+  page:{
+    minHeight:"100vh",
     background:
-      "radial-gradient(circle at top, #1e3a8a 0%, #020617 38%, #000 100%)",
-    color: "white",
-    fontFamily: "Arial, sans-serif",
-    padding: 18,
-    direction: "rtl",
+"radial-gradient(circle at top,#1e3a8a 0%,#020617 38%,#000 100%)",
+    color:"white",
+    fontFamily:"Arial",
+    padding:18,
+    direction:"rtl"
   },
-  container: {
-    maxWidth: 520,
-    margin: "0 auto",
+
+  container:{
+    maxWidth:520,
+    margin:"0 auto"
   },
-  header: {
-    textAlign: "center",
-    padding: "20px 0",
+
+  header:{
+    textAlign:"center",
+    padding:"20px 0"
   },
-  moon: {
-    fontSize: 50,
+
+  moon:{
+    fontSize:50
   },
-  title: {
-    margin: "8px 0",
-    fontSize: 34,
+
+  title:{
+    margin:"8px 0",
+    fontSize:34
   },
-  subtitle: {
-    opacity: 0.75,
-    margin: 0,
+
+  subtitle:{
+    opacity:0.75,
+    margin:0
   },
-  card: {
-    background: "rgba(15, 23, 42, 0.9)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 18,
-    boxShadow: "0 18px 45px rgba(0,0,0,0.35)",
+
+  card:{
+    background:
+"rgba(15,23,42,.9)",
+    border:
+"1px solid rgba(255,255,255,.08)",
+    borderRadius:24,
+    padding:20,
+    marginBottom:18,
+    boxShadow:
+"0 18px 45px rgba(0,0,0,.35)"
   },
-  cardTitle: {
-    fontSize: 20,
-    marginTop: 0,
-    marginBottom: 14,
+
+  cardTitle:{
+    fontSize:20,
+    marginTop:0,
+    marginBottom:14
   },
-  label: {
-    display: "block",
-    marginBottom: 6,
-    opacity: 0.85,
+
+  label:{
+    display:"block",
+    marginBottom:6,
+    opacity:.85
   },
-  input: {
-    width: "100%",
-    padding: 14,
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "#020617",
-    color: "white",
-    marginBottom: 12,
-    fontSize: 16,
-    boxSizing: "border-box",
+
+  input:{
+    width:"100%",
+    padding:14,
+    borderRadius:14,
+    border:
+"1px solid rgba(255,255,255,.12)",
+    background:"#020617",
+    color:"white",
+    marginBottom:12,
+    fontSize:16,
+    boxSizing:"border-box"
   },
-  primaryButton: {
-    width: "100%",
-    padding: 16,
-    borderRadius: 18,
-    border: "none",
-    background: "linear-gradient(135deg, #2563eb, #7c3aed)",
-    color: "white",
-    fontSize: 20,
-    fontWeight: "bold",
-    cursor: "pointer",
+
+  primaryButton:{
+    width:"100%",
+    padding:16,
+    borderRadius:18,
+    border:"none",
+    background:
+"linear-gradient(135deg,#2563eb,#7c3aed)",
+    color:"white",
+    fontSize:20,
+    fontWeight:"bold",
+    cursor:"pointer"
   },
-  secondaryButton: {
-    width: "100%",
-    padding: 14,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.15)",
-    background: "#334155",
-    color: "white",
-    fontSize: 17,
-    fontWeight: "bold",
-    cursor: "pointer",
+
+  secondaryButton:{
+    width:"100%",
+    padding:14,
+    borderRadius:16,
+    border:
+"1px solid rgba(255,255,255,.15)",
+    background:"#334155",
+    color:"white",
+    fontSize:17,
+    fontWeight:"bold",
+    cursor:"pointer"
   },
-  resultGrid: {
-    display: "grid",
-    gap: 10,
+
+  resultGrid:{
+    display:"grid",
+    gap:10
   },
-  highlightBox: {
-    display: "grid",
-    gap: 10,
-    background: "rgba(37, 99, 235, 0.12)",
-    borderRadius: 18,
-    padding: 14,
+
+  highlightBox:{
+    display:"grid",
+    gap:10,
+    background:
+"rgba(37,99,235,.12)",
+    borderRadius:18,
+    padding:14
   },
-  customBox: {
-    marginTop: 16,
-    display: "grid",
-    gap: 10,
+
+  customBox:{
+    marginTop:16,
+    display:"grid",
+    gap:10
   },
-  resultItem: {
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 14,
-    padding: 12,
+
+  resultItem:{
+    background:
+"rgba(255,255,255,.06)",
+    borderRadius:14,
+    padding:12
   },
-  resultLabel: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginBottom: 4,
+
+  resultLabel:{
+    fontSize:13,
+    opacity:.7,
+    marginBottom:4
   },
-  resultValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
+
+  resultValue:{
+    fontSize:20,
+    fontWeight:"bold"
+  }
+
 };
