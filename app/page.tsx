@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import * as Astronomy from "astronomy-engine";
 
 function localInputNow() {
   const now = new Date();
@@ -10,56 +9,22 @@ function localInputNow() {
     .slice(0, 16);
 }
 
-function fmtTime(d?: Date) {
-  if (!d) return "-";
-  return d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
-}
+function fmtDateTime(iso?: string) {
+  if (!iso) return { date: "-", day: "-", time: "-" };
 
-function fmtDate(d?: Date) {
-  if (!d) return "-";
-  return d.toLocaleDateString("ar-SA", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function fmtDay(d?: Date) {
-  if (!d) return "-";
-  return d.toLocaleDateString("ar-SA", { weekday: "long" });
-}
-
-function ageText(hours: number) {
-  const h = Math.floor(hours);
-  const m = Math.floor((hours - h) * 60);
-  const s = Math.floor((((hours - h) * 60) - m) * 60);
-  return `${h} ساعة ${m} دقيقة ${s} ثانية`;
-}
-
-function addMinutes(d: Date, m: number) {
-  return new Date(d.getTime() + m * 60000);
-}
-
-function moonInfo(date: Date, observer: Astronomy.Observer, newMoonDate: Date) {
-  const time = new Astronomy.AstroTime(date);
-
-  const eq = Astronomy.Equator("Moon", time, observer, true, true);
-  const hor = Astronomy.Horizon(time, observer, eq.ra, eq.dec, "normal");
-
-  const elongation = Astronomy.AngleFromSun("Moon", time);
-  const illum = Astronomy.Illumination("Moon", time);
-
-  const ageHours = (date.getTime() - newMoonDate.getTime()) / 3600000;
+  const d = new Date(iso);
 
   return {
-    date: fmtDate(date),
-    day: fmtDay(date),
-    time: fmtTime(date),
-    altitude: hor.altitude.toFixed(2),
-    azimuth: hor.azimuth.toFixed(2),
-    age: ageText(Math.max(0, ageHours)),
-    elongation: elongation.toFixed(2),
-    illumination: (illum.phase_fraction * 100).toFixed(3),
+    date: d.toLocaleDateString("ar-SA", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
+    day: d.toLocaleDateString("ar-SA", { weekday: "long" }),
+    time: d.toLocaleTimeString("ar-SA", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
   };
 }
 
@@ -67,139 +32,50 @@ export default function Page() {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [observeTime, setObserveTime] = useState(localInputNow());
-  const [mainResult, setMainResult] = useState<any>(null);
-  const [customResult, setCustomResult] = useState<any>(null);
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState("جاري قراءة الموقع...");
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition(
       (pos) => {
         setLat(pos.coords.latitude.toFixed(6));
         setLng(pos.coords.longitude.toFixed(6));
+        setGpsStatus(`تم تحديد الموقع - الدقة ${Math.round(pos.coords.accuracy)} متر`);
       },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      () => {
+        setGpsStatus("تعذر قراءة الموقع، أدخل الإحداثيات يدويًا");
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   }, []);
 
-  function findBestHilalTime(observer: Astronomy.Observer) {
-    const now = new Date();
+  async function calculate() {
+    setLoading(true);
+    setResult(null);
 
-    const nextNewMoon = Astronomy.SearchMoonPhase(
-      0,
-      new Astronomy.AstroTime(now),
-      40
-    ).date;
+    try {
+      const url =
+        `/api/hilal?lat=${encodeURIComponent(lat)}` +
+        `&lng=${encodeURIComponent(lng)}` +
+        `&observeTime=${encodeURIComponent(observeTime)}`;
 
-    let best: any = null;
+      const res = await fetch(url);
+      const json = await res.json();
 
-    for (let day = 0; day <= 3; day++) {
-      const checkDay = new Date(nextNewMoon);
-      checkDay.setDate(checkDay.getDate() + day);
-
-      const dayStart = new Date(
-        checkDay.getFullYear(),
-        checkDay.getMonth(),
-        checkDay.getDate(),
-        0,
-        0,
-        0
-      );
-
-      const sunsetEvent = Astronomy.SearchRiseSet(
-        "Sun",
-        observer,
-        -1,
-        new Astronomy.AstroTime(dayStart),
-        2
-      );
-
-      if (!sunsetEvent) continue;
-
-      const sunset = sunsetEvent.date;
-
-      const moonsetEvent = Astronomy.SearchRiseSet(
-        "Moon",
-        observer,
-        -1,
-        new Astronomy.AstroTime(sunset),
-        1
-      );
-
-      if (!moonsetEvent) continue;
-
-      const moonset = moonsetEvent.date;
-      const lag = (moonset.getTime() - sunset.getTime()) / 60000;
-
-      if (lag <= 0) continue;
-
-      for (let m = 5; m < lag - 2; m += 2) {
-        const t = addMinutes(sunset, m);
-        const info = moonInfo(t, observer, nextNewMoon);
-
-        const altitude = Number(info.altitude);
-        const elongation = Number(info.elongation);
-        const illumination = Number(info.illumination);
-
-        const score =
-          altitude * 2 +
-          elongation * 1.5 +
-          lag * 0.25 +
-          illumination * 0.5;
-
-        if (!best || score > best.score) {
-          best = {
-            score,
-            sunset,
-            moonset,
-            lag,
-            newMoonDate: nextNewMoon,
-            info,
-          };
-        }
-      }
+      setResult(json);
+    } catch {
+      setResult({ error: "حدث خطأ أثناء الحساب" });
+    } finally {
+      setLoading(false);
     }
-
-    return best;
   }
 
-  function calculate() {
-    const observer = new Astronomy.Observer(Number(lat), Number(lng), 0);
-
-    const best = findBestHilalTime(observer);
-
-    if (!best) {
-      setMainResult({
-        error: "لم يتم العثور على وقت مناسب لرصد الهلال الجديد من موقعك خلال الأيام القادمة.",
-      });
-      return;
-    }
-
-    setMainResult({
-      newMoonDate: fmtDate(best.newMoonDate),
-      newMoonTime: fmtTime(best.newMoonDate),
-      sunset: fmtTime(best.sunset),
-      moonset: fmtTime(best.moonset),
-      lag: best.lag.toFixed(1),
-      best: best.info,
-    });
-
-    calculateCustom(best.newMoonDate);
-  }
-
-  function calculateCustom(newMoonDate?: Date) {
-    const observer = new Astronomy.Observer(Number(lat), Number(lng), 0);
-    const date = new Date(observeTime);
-
-    const baseNewMoon =
-      newMoonDate ??
-      Astronomy.SearchMoonPhase(
-        0,
-        new Astronomy.AstroTime(new Date()),
-        40
-      ).date;
-
-    setCustomResult(moonInfo(date, observer, baseNewMoon));
-  }
+  const bestDT = fmtDateTime(result?.best?.best?.iso);
+  const newMoonDT = fmtDateTime(result?.best?.newMoonIso);
+  const sunsetDT = fmtDateTime(result?.best?.sunsetIso);
+  const moonsetDT = fmtDateTime(result?.best?.moonsetIso);
+  const customDT = fmtDateTime(result?.custom?.iso);
 
   return (
     <main style={styles.page}>
@@ -207,11 +83,13 @@ export default function Page() {
         <header style={styles.header}>
           <div style={styles.moon}>🌙</div>
           <h1 style={styles.title}>مرصد الهلال</h1>
-          <p style={styles.subtitle}>أفضل وقت لرصد الهلال الجديد حسب موقعك</p>
+          <p style={styles.subtitle}>حساب أفضل وقت لرصد الهلال الجديد حسب موقعك</p>
         </header>
 
         <section style={styles.card}>
           <h2 style={styles.cardTitle}>📍 موقع الراصد</h2>
+
+          <p style={styles.note}>{gpsStatus}</p>
 
           <label style={styles.label}>خط العرض</label>
           <input value={lat} onChange={(e) => setLat(e.target.value)} style={styles.input} />
@@ -219,34 +97,42 @@ export default function Page() {
           <label style={styles.label}>خط الطول</label>
           <input value={lng} onChange={(e) => setLng(e.target.value)} style={styles.input} />
 
-          <button onClick={calculate} style={styles.primaryButton}>🔭 احسب</button>
+          <button onClick={calculate} style={styles.primaryButton}>
+            {loading ? "جاري الحساب..." : "🔭 احسب"}
+          </button>
         </section>
 
-        {mainResult?.error && (
+        {result?.error && (
           <section style={styles.card}>
-            <h2>{mainResult.error}</h2>
+            <h2>{result.error}</h2>
           </section>
         )}
 
-        {mainResult?.best && (
+        {result?.best && (
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>🌑 الهلال الجديد القادم</h2>
-            <Result label="تاريخ الاقتران" value={mainResult.newMoonDate} />
-            <Result label="وقت الاقتران" value={mainResult.newMoonTime} />
-            <Result label="غروب الشمس" value={mainResult.sunset} />
-            <Result label="غروب القمر" value={mainResult.moonset} />
-            <Result label="مكث القمر" value={`${mainResult.lag} دقيقة`} />
+            <h2 style={styles.cardTitle}>🌑 الاقتران / الهلال الجديد القادم</h2>
+            <Result label="تاريخ الاقتران" value={newMoonDT.date} />
+            <Result label="اليوم" value={newMoonDT.day} />
+            <Result label="وقت الاقتران" value={newMoonDT.time} />
 
-            <h2 style={styles.cardTitle}>⭐ أفضل وقت للرصد حسب موقعك</h2>
+            <h2 style={styles.cardTitle}>🌇 معلومات يوم الرصد</h2>
+            <Result label="غروب الشمس" value={sunsetDT.time} />
+            <Result label="غروب القمر" value={moonsetDT.time} />
+            <Result label="مكث القمر" value={`${result.best.lag} دقيقة`} />
+
+            <h2 style={styles.cardTitle}>⭐ أفضل وقت لرصد الهلال حسب موقعك</h2>
             <div style={styles.highlightBox}>
-              <Result label="التاريخ" value={mainResult.best.date} />
-              <Result label="اليوم" value={mainResult.best.day} />
-              <Result label="الساعة" value={mainResult.best.time} />
-              <Result label="الاتجاه بالبوصلة" value={`${mainResult.best.azimuth}°`} />
-              <Result label="الارتفاع" value={`${mainResult.best.altitude}°`} />
-              <Result label="العمر" value={mainResult.best.age} />
-              <Result label="الاستطالة" value={`${mainResult.best.elongation}°`} />
-              <Result label="الإضاءة" value={`${mainResult.best.illumination}%`} />
+              <Result label="التاريخ" value={bestDT.date} />
+              <Result label="اليوم" value={bestDT.day} />
+              <Result label="الساعة" value={bestDT.time} />
+              <Result label="الاتجاه بالبوصلة" value={`${result.best.best.azimuth}°`} />
+              <Result label="الارتفاع" value={`${result.best.best.altitude}°`} />
+              <Result label="العمر" value={result.best.best.ageText} />
+              <Result label="الاستطالة" value={`${result.best.best.elongation}°`} />
+              <Result label="الإضاءة" value={`${result.best.best.illumination}%`} />
+              <Result label="ARCV" value={`${result.best.best.arcv}°`} />
+              <Result label="عرض الهلال W" value={`${result.best.best.width} دقيقة قوسية`} />
+              <Result label="معيار عودة" value={result.best.best.visibility} />
             </div>
           </section>
         )}
@@ -261,20 +147,22 @@ export default function Page() {
             style={styles.input}
           />
 
-          <button onClick={() => calculateCustom()} style={styles.secondaryButton}>
-            احسب وقت رصدي
+          <button onClick={calculate} style={styles.secondaryButton}>
+            احسب حسب وقت رصدي
           </button>
 
-          {customResult && (
+          {result?.custom && (
             <div style={styles.customBox}>
               <Result label="موقعي بالإحداثيات" value={`${lat}, ${lng}`} />
-              <Result label="التاريخ" value={customResult.date} />
-              <Result label="اليوم" value={customResult.day} />
-              <Result label="الساعة" value={customResult.time} />
-              <Result label="عمر القمر" value={customResult.age} />
-              <Result label="الارتفاع" value={`${customResult.altitude}°`} />
-              <Result label="الاستطالة" value={`${customResult.elongation}°`} />
-              <Result label="الإضاءة" value={`${customResult.illumination}%`} />
+              <Result label="التاريخ" value={customDT.date} />
+              <Result label="اليوم" value={customDT.day} />
+              <Result label="الساعة" value={customDT.time} />
+              <Result label="عمر القمر" value={result.custom.ageText} />
+              <Result label="الارتفاع" value={`${result.custom.altitude}°`} />
+              <Result label="الاستطالة" value={`${result.custom.elongation}°`} />
+              <Result label="الإضاءة" value={`${result.custom.illumination}%`} />
+              <Result label="الاتجاه بالبوصلة" value={`${result.custom.azimuth}°`} />
+              <Result label="معيار عودة" value={result.custom.visibility} />
             </div>
           )}
         </section>
@@ -295,7 +183,8 @@ function Result({ label, value }: { label: string; value: string }) {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top, #1e3a8a 0%, #020617 38%, #000 100%)",
+    background:
+      "radial-gradient(circle at top, #1e3a8a 0%, #020617 38%, #000 100%)",
     color: "white",
     fontFamily: "Arial, sans-serif",
     padding: 18,
@@ -315,6 +204,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: "0 18px 45px rgba(0,0,0,.35)",
   },
   cardTitle: { fontSize: 20, marginTop: 0, marginBottom: 14 },
+  note: { opacity: 0.75, fontSize: 13 },
   label: { display: "block", marginBottom: 6, opacity: 0.85 },
   input: {
     width: "100%",
