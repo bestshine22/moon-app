@@ -13,35 +13,89 @@ function ageText(hours: number) {
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
-function visibilityStatus(alt: number, elong: number, illum: number, lag: number) {
-  if (alt >= 10 && elong >= 12 && illum <= 3.5 && lag >= 30) {
-    return { text: "مرئي بإذن الله", level: "good" };
-  }
-
-  if (alt >= 6 && elong >= 9 && lag >= 20) {
-    return { text: "ممكن بصعوبة", level: "medium" };
-  }
-
-  return { text: "غير مناسب للرؤية", level: "bad" };
+function crescentWidthArcMin(elongDeg: number) {
+  const moonSemiDiameterArcMin = 16.0;
+  const e = (elongDeg * Math.PI) / 180;
+  return moonSemiDiameterArcMin * (1 - Math.cos(e));
 }
 
-function moonData(date: Date, observer: Astronomy.Observer, newMoon: Date, lag: number) {
+function visibilityStatus(
+  altitude: number,
+  elongation: number,
+  illumination: number,
+  lag: number,
+  ageHours: number,
+  arcv: number,
+  width: number
+) {
+  if (
+    altitude >= 10 &&
+    elongation >= 12 &&
+    illumination >= 0.8 &&
+    illumination <= 3.5 &&
+    lag >= 35 &&
+    ageHours >= 18 &&
+    ageHours <= 36 &&
+    arcv >= 10 &&
+    width >= 0.35
+  ) {
+    return {
+      text: "مناسب للرؤية بالعين المجردة",
+      level: "good",
+    };
+  }
+
+  if (
+    altitude >= 7 &&
+    elongation >= 10 &&
+    illumination <= 4.5 &&
+    lag >= 25 &&
+    ageHours >= 15 &&
+    arcv >= 7 &&
+    width >= 0.25
+  ) {
+    return {
+      text: "ممكن بصعوبة بالعين المجردة",
+      level: "medium",
+    };
+  }
+
+  return {
+    text: "غير مناسب للعين المجردة",
+    level: "bad",
+  };
+}
+
+function moonData(
+  date: Date,
+  observer: Astronomy.Observer,
+  newMoon: Date,
+  lag: number
+) {
   const time = new Astronomy.AstroTime(date);
 
   const moonEq = Astronomy.Equator("Moon", time, observer, true, true);
   const moonHor = Astronomy.Horizon(time, observer, moonEq.ra, moonEq.dec, "normal");
+
+  const sunEq = Astronomy.Equator("Sun", time, observer, true, true);
+  const sunHor = Astronomy.Horizon(time, observer, sunEq.ra, sunEq.dec, "normal");
 
   const elongation = Astronomy.AngleFromSun("Moon", time);
   const illumination = Astronomy.Illumination("Moon", time);
 
   const ageHours = (date.getTime() - newMoon.getTime()) / 3600000;
   const illumPercent = illumination.phase_fraction * 100;
+  const arcv = moonHor.altitude - sunHor.altitude;
+  const width = crescentWidthArcMin(elongation);
 
   const status = visibilityStatus(
     moonHor.altitude,
     elongation,
     illumPercent,
-    lag
+    lag,
+    ageHours,
+    arcv,
+    width
   );
 
   return {
@@ -52,8 +106,18 @@ function moonData(date: Date, observer: Astronomy.Observer, newMoon: Date, lag: 
     ageText: ageText(ageHours),
     elongation: fmt(elongation),
     illumination: fmt(illumPercent),
+    arcv: fmt(arcv),
+    width: fmt(width),
     visibility: status.text,
     visibilityLevel: status.level,
+    numeric: {
+      altitude: moonHor.altitude,
+      elongation,
+      illumination: illumPercent,
+      ageHours,
+      arcv,
+      width,
+    },
   };
 }
 
@@ -69,7 +133,7 @@ function findBest(observer: Astronomy.Observer) {
   const newMoon = newMoonTime.date;
   let best: any = null;
 
-  for (let day = 0; day <= 2; day++) {
+  for (let day = 0; day <= 3; day++) {
     const d = new Date(newMoon);
     d.setDate(d.getDate() + day);
 
@@ -107,28 +171,39 @@ function findBest(observer: Astronomy.Observer) {
     const moonset = moonsetTime.date;
     const lag = (moonset.getTime() - sunset.getTime()) / 60000;
 
-    if (lag <= 0) continue;
+    if (lag <= 20) continue;
 
-    for (let minute = 5; minute <= Math.min(90, lag - 2); minute += 2) {
+    for (let minute = 8; minute <= Math.min(75, lag - 3); minute += 2) {
       const t = new Date(sunset.getTime() + minute * 60000);
+
       const info = moonData(t, observer, newMoon, lag);
 
-      const altitude = Number(info.altitude);
-      const elongation = Number(info.elongation);
-      const illum = Number(info.illumination);
-      const age = Number(info.ageHours);
+      const altitude = info.numeric.altitude;
+      const elongation = info.numeric.elongation;
+      const illum = info.numeric.illumination;
+      const age = info.numeric.ageHours;
+      const arcv = info.numeric.arcv;
+      const width = info.numeric.width;
 
-      if (age < 12) continue;
+      if (age < 15) continue;
       if (age > 40) continue;
-      if (illum > 3.5) continue;
-      if (altitude < 3) continue;
-      if (elongation < 7) continue;
+      if (altitude < 5) continue;
+      if (elongation < 9) continue;
+      if (illum > 4.5) continue;
+      if (arcv < 6) continue;
+      if (width < 0.2) continue;
+
+      const idealMinute = Math.min(45, Math.max(18, lag * 0.45));
+      const timingPenalty = Math.abs(minute - idealMinute) * 0.5;
 
       const score =
-        altitude * 3 +
-        elongation * 2 +
-        lag * 0.25 -
-        illum * 0.5;
+        altitude * 3.0 +
+        elongation * 2.2 +
+        arcv * 2.0 +
+        width * 25 +
+        lag * 0.18 -
+        illum * 0.35 -
+        timingPenalty;
 
       if (!best || score > best.score) {
         best = {
@@ -166,7 +241,8 @@ export async function GET(request: Request) {
 
     if (!best) {
       return NextResponse.json({
-        error: "تعذر العثور على هلال جديد مناسب للرصد من هذا الموقع خلال الأيام القادمة.",
+        error:
+          "لم يتم العثور على وقت مناسب للرؤية بالعين المجردة من هذا الموقع خلال الأيام القادمة.",
       });
     }
 
