@@ -31,6 +31,11 @@ function ageText(hours: number) {
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
+function illuminationFromPhaseAngle(phaseAngleDeg: number) {
+  const rad = (phaseAngleDeg * Math.PI) / 180;
+  return ((1 + Math.cos(rad)) / 2) * 100;
+}
+
 function searchNewMoonAfter(date: Date) {
   return Astronomy.SearchMoonPhase(0, new Astronomy.AstroTime(date), 60).date;
 }
@@ -49,7 +54,6 @@ function searchNewMoonBefore(date: Date) {
 
     while (candidate <= date) {
       last = candidate;
-
       candidate = Astronomy.SearchMoonPhase(
         0,
         new Astronomy.AstroTime(new Date(candidate.getTime() + 3600_000)),
@@ -58,7 +62,6 @@ function searchNewMoonBefore(date: Date) {
     }
 
     if (last) return last;
-
     start = new Date(start.getTime() - 40 * 86400_000);
   }
 
@@ -79,7 +82,7 @@ function formatUtcForJpl(date: Date) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
-function parseJplAltAz(text: string) {
+function parseJplMoonData(text: string) {
   const lines = text.split("\n");
   let inside = false;
 
@@ -96,43 +99,32 @@ function parseJplAltAz(text: string) {
     if (!cleaned) continue;
 
     const parts = cleaned.split(/\s+/);
-    if (parts.length < 5) continue;
 
-    const azimuth = Number(parts[3]);
-    const altitude = Number(parts[4]);
+    const nums = parts
+      .map((p) => Number(p))
+      .filter((n) => Number.isFinite(n));
 
-    if (!Number.isFinite(azimuth) || !Number.isFinite(altitude)) continue;
+    if (nums.length < 4) continue;
 
-    return { azimuth, altitude };
+    const azimuth = nums[0];
+    const altitude = nums[1];
+    const elongation = nums[2];
+    const phaseAngle = nums[3];
+    const illumination = illuminationFromPhaseAngle(phaseAngle);
+
+    return {
+      azimuth,
+      altitude,
+      elongation,
+      phaseAngle,
+      illumination,
+    };
   }
 
   return null;
 }
 
-function angularSeparationFromAltAz(
-  alt1Deg: number,
-  az1Deg: number,
-  alt2Deg: number,
-  az2Deg: number
-) {
-  const deg = Math.PI / 180;
-
-  const alt1 = alt1Deg * deg;
-  const az1 = az1Deg * deg;
-  const alt2 = alt2Deg * deg;
-  const az2 = az2Deg * deg;
-
-  const cosSep =
-    Math.sin(alt1) * Math.sin(alt2) +
-    Math.cos(alt1) * Math.cos(alt2) * Math.cos(az1 - az2);
-
-  const clamped = Math.max(-1, Math.min(1, cosSep));
-
-  return Math.acos(clamped) / deg;
-}
-
-async function getJplAltAz(
-  bodyCommand: string,
+async function getJplMoonData(
   date: Date,
   lat: number,
   lng: number,
@@ -150,7 +142,7 @@ async function getJplAltAz(
     const url =
       "https://ssd.jpl.nasa.gov/api/horizons.api" +
       "?format=json" +
-      `&COMMAND='${bodyCommand}'` +
+      "&COMMAND='301'" +
       "&EPHEM_TYPE=OBSERVER" +
       "&CENTER='coord@399'" +
       "&COORD_TYPE=GEODETIC" +
@@ -158,51 +150,21 @@ async function getJplAltAz(
       `&START_TIME='${start}'` +
       `&STOP_TIME='${stop}'` +
       "&STEP_SIZE='1 m'" +
-      "&QUANTITIES='4'";
+      "&QUANTITIES='4,23,24'";
 
     const response = await fetch(url, { cache: "no-store" });
     const data = await response.json();
 
-    const parsed = parseJplAltAz(data?.result || "");
-
+    const parsed = parseJplMoonData(data?.result || "");
     if (!parsed) return null;
 
     return {
-      azimuth: parsed.azimuth,
-      altitude: parsed.altitude,
+      ...parsed,
+      source: "NASA JPL Horizons",
     };
   } catch {
     return null;
   }
-}
-
-async function getJplMoonSunData(
-  date: Date,
-  lat: number,
-  lng: number,
-  heightMeters: number
-) {
-  const moon = await getJplAltAz("301", date, lat, lng, heightMeters);
-  const sun = await getJplAltAz("10", date, lat, lng, heightMeters);
-
-  if (!moon) return null;
-
-  const elongation =
-    moon && sun
-      ? angularSeparationFromAltAz(
-          moon.altitude,
-          moon.azimuth,
-          sun.altitude,
-          sun.azimuth
-        )
-      : null;
-
-  return {
-    moon,
-    sun,
-    elongation,
-    source: "NASA JPL Horizons",
-  };
 }
 
 function moonCalcLocal(
@@ -212,7 +174,6 @@ function moonCalcLocal(
 ) {
   const cleanDate = floorToMinute(date);
   const newMoon = baseNewMoon ?? searchNewMoonBefore(cleanDate);
-
   const ageHours = (cleanDate.getTime() - newMoon.getTime()) / 3600000;
 
   if (!validateMoonAge(ageHours)) {
@@ -258,6 +219,7 @@ function moonCalcLocal(
     ageHours: fmt(ageHours),
     elongation: fmt(elongation),
     illumination: fmt(illumPercent),
+    phaseAngle: "-",
 
     accuracySource: "Astronomy Engine",
     jplVerified: false,
@@ -286,30 +248,28 @@ async function moonCalc(
   if (local.invalid) return local;
   if (!useJpl) return local;
 
-  const jpl = await getJplMoonSunData(floorToMinute(date), lat, lng, heightMeters);
+  const jpl = await getJplMoonData(floorToMinute(date), lat, lng, heightMeters);
 
   if (!jpl) return local;
-
-  const jplElongation =
-    typeof jpl.elongation === "number" && Number.isFinite(jpl.elongation)
-      ? jpl.elongation
-      : local.numeric.elongation;
 
   return {
     ...local,
 
-    azimuth: fmt(jpl.moon.azimuth),
-    altitude: fmt(jpl.moon.altitude),
-    elongation: fmt(jplElongation),
+    azimuth: fmt(jpl.azimuth),
+    altitude: fmt(jpl.altitude),
+    elongation: fmt(jpl.elongation),
+    illumination: fmt(jpl.illumination),
+    phaseAngle: fmt(jpl.phaseAngle),
 
     accuracySource: "NASA JPL Horizons",
     jplVerified: true,
 
     numeric: {
       ...local.numeric,
-      altitude: jpl.moon.altitude,
-      azimuth: jpl.moon.azimuth,
-      elongation: jplElongation,
+      altitude: jpl.altitude,
+      azimuth: jpl.azimuth,
+      elongation: jpl.elongation,
+      illumination: jpl.illumination,
     },
   };
 }
@@ -480,7 +440,7 @@ async function findUpcomingHilal(
           "أفضل وقت للهلال لا يُحسب قبل الاقتران.",
           "تم منع الارتفاع السالب.",
           "تم منع المكث غير المنطقي.",
-          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفره.",
+          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
         ],
       },
     };
@@ -539,7 +499,7 @@ async function customObservation(
       ok: true,
       notes: [
         "تم حساب العمر من آخر اقتران سابق لوقت الرصد المدخل.",
-        "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفره.",
+        "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
       ],
     },
   };
@@ -562,9 +522,7 @@ export async function GET(request: Request) {
     }
 
     const heightMeters = Number.isFinite(height) ? height : 0;
-
     const observer = new Astronomy.Observer(lat, lng, heightMeters);
-
     const now = floorToMinute(new Date());
 
     const nowData: any = await moonCalc(
@@ -612,21 +570,18 @@ export async function GET(request: Request) {
       },
 
       nowData,
-
       hilal,
-
       custom,
 
       engineValidation: {
         ok: true,
         primaryExternalReference: "NASA JPL Horizons",
         jplUsage:
-          "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفر الاتصال.",
+          "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفر الاتصال.",
         rules: [
-          "كل عمر قمر يُحسب من الاقتران المناسب للقسم.",
-          "حالة القمر الآن تستخدم آخر اقتران سابق للوقت الحالي.",
-          "أفضل وقت للهلال يستخدم الاقتران القادم فقط.",
-          "تحليل وقت الرصد يستخدم آخر اقتران سابق لوقت الرصد.",
+          "العمر يُحسب من الاقتران المناسب.",
+          "المكث يُحسب من غروب القمر وغروب الشمس محليًا.",
+          "أفضل وقت للرصد خوارزمية مبنية فوق بيانات القمر والشمس.",
           "تم منع عمر أكبر من 29.6 يوم.",
           "تم منع المكث غير المنطقي.",
           "تم منع اختيار هلال قبل الاقتران.",
