@@ -27,7 +27,10 @@ function ageText(hours: number) {
   const m = Math.floor((rest % 3600) / 60);
   const s = rest % 60;
 
-  if (days >= 1) return `${days} يوم ${h} ساعة ${m} دقيقة`;
+  if (days >= 1) {
+    return `${days} يوم ${h} ساعة ${m} دقيقة`;
+  }
+
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
@@ -73,7 +76,103 @@ function validateMoonAge(ageHours: number) {
   return ageHours >= 0 && ageHours <= MAX_MOON_AGE_HOURS;
 }
 
-function moonCalc(date: Date, observer: Astronomy.Observer, baseNewMoon?: Date) {
+function parseJplHorizons(text: string) {
+  const lines = text.split("\n");
+  let inside = false;
+
+  for (const line of lines) {
+    if (line.includes("$$SOE")) {
+      inside = true;
+      continue;
+    }
+
+    if (line.includes("$$EOE")) break;
+
+    if (!inside) continue;
+
+    const cleaned = line.trim();
+    if (!cleaned) continue;
+
+    const parts = cleaned.split(/\s+/);
+
+    if (parts.length < 5) continue;
+
+    const azimuth = Number(parts[3]);
+    const altitude = Number(parts[4]);
+
+    if (!Number.isFinite(azimuth) || !Number.isFinite(altitude)) continue;
+
+    return {
+      azimuth,
+      altitude,
+    };
+  }
+
+  return null;
+}
+
+function formatUtcForJpl(date: Date) {
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const mi = String(date.getUTCMinutes()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+async function getJplAltAz(
+  date: Date,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
+  try {
+    const cleanDate = floorToMinute(date);
+    const stopDate = addMinutes(cleanDate, 1);
+
+    const start = formatUtcForJpl(cleanDate);
+    const stop = formatUtcForJpl(stopDate);
+
+    const heightKm = Number.isFinite(heightMeters) ? heightMeters / 1000 : 0;
+
+    const url =
+      "https://ssd.jpl.nasa.gov/api/horizons.api" +
+      "?format=json" +
+      "&COMMAND='301'" +
+      "&EPHEM_TYPE=OBSERVER" +
+      "&CENTER='coord@399'" +
+      "&COORD_TYPE=GEODETIC" +
+      `&SITE_COORD='${lng},${lat},${heightKm}'` +
+      `&START_TIME='${start}'` +
+      `&STOP_TIME='${stop}'` +
+      "&STEP_SIZE='1 m'" +
+      "&QUANTITIES='4'";
+
+    const response = await fetch(url, {
+      cache: "no-store",
+    });
+
+    const data = await response.json();
+    const parsed = parseJplHorizons(data?.result || "");
+
+    if (!parsed) return null;
+
+    return {
+      azimuth: parsed.azimuth,
+      altitude: parsed.altitude,
+      source: "NASA JPL Horizons",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function moonCalcLocal(
+  date: Date,
+  observer: Astronomy.Observer,
+  baseNewMoon?: Date
+) {
   const cleanDate = floorToMinute(date);
   const newMoon = baseNewMoon ?? searchNewMoonBefore(cleanDate);
 
@@ -123,6 +222,9 @@ function moonCalc(date: Date, observer: Astronomy.Observer, baseNewMoon?: Date) 
     elongation: fmt(elongation),
     illumination: fmt(illumPercent),
 
+    accuracySource: "Astronomy Engine",
+    jplVerified: false,
+
     numeric: {
       altitude: moonHor.altitude,
       azimuth: moonHor.azimuth,
@@ -133,7 +235,43 @@ function moonCalc(date: Date, observer: Astronomy.Observer, baseNewMoon?: Date) 
   };
 }
 
-function illuminationCheck(
+async function moonCalc(
+  date: Date,
+  observer: Astronomy.Observer,
+  lat: number,
+  lng: number,
+  heightMeters: number,
+  baseNewMoon?: Date,
+  useJpl = true
+) {
+  const local: any = moonCalcLocal(date, observer, baseNewMoon);
+
+  if (local.invalid) return local;
+
+  if (!useJpl) return local;
+
+  const jpl = await getJplAltAz(floorToMinute(date), lat, lng, heightMeters);
+
+  if (!jpl) return local;
+
+  return {
+    ...local,
+
+    azimuth: fmt(jpl.azimuth),
+    altitude: fmt(jpl.altitude),
+
+    accuracySource: "NASA JPL Horizons",
+    jplVerified: true,
+
+    numeric: {
+      ...local.numeric,
+      altitude: jpl.altitude,
+      azimuth: jpl.azimuth,
+    },
+  };
+}
+
+function illuminationCheckLocal(
   observer: Astronomy.Observer,
   newMoon: Date,
   checkTime: Date
@@ -141,8 +279,8 @@ function illuminationCheck(
   const t1 = floorToMinute(checkTime);
   const t2 = addMinutes(t1, 30);
 
-  const a: any = moonCalc(t1, observer, newMoon);
-  const b: any = moonCalc(t2, observer, newMoon);
+  const a: any = moonCalcLocal(t1, observer, newMoon);
+  const b: any = moonCalcLocal(t2, observer, newMoon);
 
   if (a.invalid || b.invalid) {
     return {
@@ -160,8 +298,8 @@ function illuminationCheck(
   };
 }
 
-function findMoonsetAfter(observer: Astronomy.Observer, startDate: Date) {
-  const startInfo: any = moonCalc(startDate, observer);
+function findMoonsetAfterLocal(observer: Astronomy.Observer, startDate: Date) {
+  const startInfo: any = moonCalcLocal(startDate, observer);
 
   if (startInfo.invalid || startInfo.numeric.altitude <= 0) {
     return null;
@@ -206,7 +344,12 @@ function findSunset(observer: Astronomy.Observer, date: Date) {
   return event ? floorToMinute(event.date) : null;
 }
 
-function findUpcomingHilal(observer: Astronomy.Observer) {
+async function findUpcomingHilal(
+  observer: Astronomy.Observer,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
   const now = floorToMinute(new Date());
   const newMoon = searchNewMoonAfter(now);
 
@@ -219,14 +362,14 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
 
     if (sunset <= newMoon) continue;
 
-    const sunsetData: any = moonCalc(sunset, observer, newMoon);
+    const sunsetDataLocal: any = moonCalcLocal(sunset, observer, newMoon);
 
-    if (sunsetData.invalid) continue;
-    if (sunsetData.numeric.ageHours < 8) continue;
-    if (sunsetData.numeric.ageHours > 48) continue;
-    if (sunsetData.numeric.altitude <= 0) continue;
+    if (sunsetDataLocal.invalid) continue;
+    if (sunsetDataLocal.numeric.ageHours < 8) continue;
+    if (sunsetDataLocal.numeric.ageHours > 48) continue;
+    if (sunsetDataLocal.numeric.altitude <= 0) continue;
 
-    const moonset = findMoonsetAfter(observer, sunset);
+    const moonset = findMoonsetAfterLocal(observer, sunset);
     if (!moonset) continue;
 
     const lag = (moonset.getTime() - sunset.getTime()) / 60000;
@@ -237,7 +380,7 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
 
     for (let minute = 3; minute <= Math.min(20, lag - 2); minute++) {
       const t = floorToMinute(addMinutes(sunset, minute));
-      const info: any = moonCalc(t, observer, newMoon);
+      const info: any = moonCalcLocal(t, observer, newMoon);
 
       if (info.invalid) continue;
       if (info.numeric.ageHours < 8) continue;
@@ -251,11 +394,33 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
         Math.abs(minute - 8) * 0.9;
 
       if (!visualBest || score > visualBest.score) {
-        visualBest = { score, data: info };
+        visualBest = { score, date: t, localData: info };
       }
     }
 
-    const illumCheck = illuminationCheck(observer, newMoon, sunset);
+    const bestDate = visualBest?.date ?? sunset;
+
+    const visualBestAccurate = await moonCalc(
+      bestDate,
+      observer,
+      lat,
+      lng,
+      heightMeters,
+      newMoon,
+      true
+    );
+
+    const sunsetDataAccurate = await moonCalc(
+      sunset,
+      observer,
+      lat,
+      lng,
+      heightMeters,
+      newMoon,
+      true
+    );
+
+    const illumCheck = illuminationCheckLocal(observer, newMoon, sunset);
 
     return {
       kind: "upcoming_hilal",
@@ -263,8 +428,8 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
       sunsetIso: sunset.toISOString(),
       moonsetIso: moonset.toISOString(),
       lag: lag.toFixed(1),
-      sunsetData,
-      visualBest: visualBest?.data ?? sunsetData,
+      sunsetData: sunsetDataAccurate,
+      visualBest: visualBestAccurate,
       validation: {
         ok: true,
         illuminationCheck: illumCheck,
@@ -272,7 +437,7 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
           "أفضل وقت للهلال لا يُحسب قبل الاقتران.",
           "تم منع الارتفاع السالب.",
           "تم منع المكث غير المنطقي.",
-          "تم استخدام اقتران الهلال القادم فقط لهذا القسم.",
+          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفره.",
         ],
       },
     };
@@ -281,8 +446,11 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
   return null;
 }
 
-function customObservation(
+async function customObservation(
   observer: Astronomy.Observer,
+  lat: number,
+  lng: number,
+  heightMeters: number,
   observeTime: string
 ) {
   const customDate = floorToMinute(new Date(observeTime));
@@ -295,11 +463,20 @@ function customObservation(
   }
 
   const previous = searchNewMoonBefore(customDate);
-  const data: any = moonCalc(customDate, observer, previous);
+
+  const data: any = await moonCalc(
+    customDate,
+    observer,
+    lat,
+    lng,
+    heightMeters,
+    previous,
+    true
+  );
 
   if (data.invalid) return data;
 
-  const moonset = findMoonsetAfter(observer, customDate);
+  const moonset = findMoonsetAfterLocal(observer, customDate);
 
   let remainingMoonset = "0.0";
 
@@ -319,7 +496,7 @@ function customObservation(
       ok: true,
       notes: [
         "تم حساب العمر من آخر اقتران سابق لوقت الرصد المدخل.",
-        "لن يتجاوز العمر شهرًا قمريًا طبيعيًا.",
+        "تم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفره.",
       ],
     },
   };
@@ -341,14 +518,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const observer = new Astronomy.Observer(
-      lat,
-      lng,
-      Number.isFinite(height) ? height : 0
-    );
+    const heightMeters = Number.isFinite(height) ? height : 0;
+
+    const observer = new Astronomy.Observer(lat, lng, heightMeters);
 
     const now = floorToMinute(new Date());
-    const nowData: any = moonCalc(now, observer);
+
+    const nowData: any = await moonCalc(
+      now,
+      observer,
+      lat,
+      lng,
+      heightMeters,
+      undefined,
+      true
+    );
 
     if (nowData.invalid) {
       return NextResponse.json({
@@ -357,7 +541,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const hilal = findUpcomingHilal(observer);
+    const hilal = await findUpcomingHilal(observer, lat, lng, heightMeters);
 
     if (!hilal) {
       return NextResponse.json({
@@ -368,14 +552,20 @@ export async function GET(request: Request) {
     let custom = null;
 
     if (observeTime) {
-      custom = customObservation(observer, observeTime);
+      custom = await customObservation(
+        observer,
+        lat,
+        lng,
+        heightMeters,
+        observeTime
+      );
     }
 
     return NextResponse.json({
       observer: {
         lat,
         lng,
-        height,
+        height: heightMeters,
       },
 
       nowData,
@@ -386,6 +576,9 @@ export async function GET(request: Request) {
 
       engineValidation: {
         ok: true,
+        primaryExternalReference: "NASA JPL Horizons",
+        jplUsage:
+          "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفر الاتصال.",
         rules: [
           "كل عمر قمر يُحسب من الاقتران المناسب للقسم.",
           "حالة القمر الآن تستخدم آخر اقتران سابق للوقت الحالي.",
