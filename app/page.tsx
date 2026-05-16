@@ -189,6 +189,17 @@ export default function Page() {
           <p style={subtitleStyle}>
             حسابات فلكية دقيقة للهلال حسب موقعك والوقت
           </p>
+<p
+  style={{
+    textAlign: "center",
+    color: "#22c55e",
+    fontSize: 18,
+    fontWeight: 900,
+    marginTop: 10,
+  }}
+>
+  NASA JPL ACTIVE
+</p>
         </header>
 
         <section style={inputCardStyle}>
