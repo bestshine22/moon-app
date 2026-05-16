@@ -27,19 +27,12 @@ function ageText(hours: number) {
   const m = Math.floor((rest % 3600) / 60);
   const s = rest % 60;
 
-  if (days >= 1) {
-    return `${days} يوم ${h} ساعة ${m} دقيقة`;
-  }
-
+  if (days >= 1) return `${days} يوم ${h} ساعة ${m} دقيقة`;
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
 function searchNewMoonAfter(date: Date) {
-  return Astronomy.SearchMoonPhase(
-    0,
-    new Astronomy.AstroTime(date),
-    60
-  ).date;
+  return Astronomy.SearchMoonPhase(0, new Astronomy.AstroTime(date), 60).date;
 }
 
 function searchNewMoonBefore(date: Date) {
@@ -76,41 +69,6 @@ function validateMoonAge(ageHours: number) {
   return ageHours >= 0 && ageHours <= MAX_MOON_AGE_HOURS;
 }
 
-function parseJplHorizons(text: string) {
-  const lines = text.split("\n");
-  let inside = false;
-
-  for (const line of lines) {
-    if (line.includes("$$SOE")) {
-      inside = true;
-      continue;
-    }
-
-    if (line.includes("$$EOE")) break;
-
-    if (!inside) continue;
-
-    const cleaned = line.trim();
-    if (!cleaned) continue;
-
-    const parts = cleaned.split(/\s+/);
-
-    if (parts.length < 5) continue;
-
-    const azimuth = Number(parts[3]);
-    const altitude = Number(parts[4]);
-
-    if (!Number.isFinite(azimuth) || !Number.isFinite(altitude)) continue;
-
-    return {
-      azimuth,
-      altitude,
-    };
-  }
-
-  return null;
-}
-
 function formatUtcForJpl(date: Date) {
   const yyyy = date.getUTCFullYear();
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -121,7 +79,60 @@ function formatUtcForJpl(date: Date) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+function parseJplAltAz(text: string) {
+  const lines = text.split("\n");
+  let inside = false;
+
+  for (const line of lines) {
+    if (line.includes("$$SOE")) {
+      inside = true;
+      continue;
+    }
+
+    if (line.includes("$$EOE")) break;
+    if (!inside) continue;
+
+    const cleaned = line.trim();
+    if (!cleaned) continue;
+
+    const parts = cleaned.split(/\s+/);
+    if (parts.length < 5) continue;
+
+    const azimuth = Number(parts[3]);
+    const altitude = Number(parts[4]);
+
+    if (!Number.isFinite(azimuth) || !Number.isFinite(altitude)) continue;
+
+    return { azimuth, altitude };
+  }
+
+  return null;
+}
+
+function angularSeparationFromAltAz(
+  alt1Deg: number,
+  az1Deg: number,
+  alt2Deg: number,
+  az2Deg: number
+) {
+  const deg = Math.PI / 180;
+
+  const alt1 = alt1Deg * deg;
+  const az1 = az1Deg * deg;
+  const alt2 = alt2Deg * deg;
+  const az2 = az2Deg * deg;
+
+  const cosSep =
+    Math.sin(alt1) * Math.sin(alt2) +
+    Math.cos(alt1) * Math.cos(alt2) * Math.cos(az1 - az2);
+
+  const clamped = Math.max(-1, Math.min(1, cosSep));
+
+  return Math.acos(clamped) / deg;
+}
+
 async function getJplAltAz(
+  bodyCommand: string,
   date: Date,
   lat: number,
   lng: number,
@@ -139,7 +150,7 @@ async function getJplAltAz(
     const url =
       "https://ssd.jpl.nasa.gov/api/horizons.api" +
       "?format=json" +
-      "&COMMAND='301'" +
+      `&COMMAND='${bodyCommand}'` +
       "&EPHEM_TYPE=OBSERVER" +
       "&CENTER='coord@399'" +
       "&COORD_TYPE=GEODETIC" +
@@ -149,23 +160,49 @@ async function getJplAltAz(
       "&STEP_SIZE='1 m'" +
       "&QUANTITIES='4'";
 
-    const response = await fetch(url, {
-      cache: "no-store",
-    });
-
+    const response = await fetch(url, { cache: "no-store" });
     const data = await response.json();
-    const parsed = parseJplHorizons(data?.result || "");
+
+    const parsed = parseJplAltAz(data?.result || "");
 
     if (!parsed) return null;
 
     return {
       azimuth: parsed.azimuth,
       altitude: parsed.altitude,
-      source: "NASA JPL Horizons",
     };
   } catch {
     return null;
   }
+}
+
+async function getJplMoonSunData(
+  date: Date,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
+  const moon = await getJplAltAz("301", date, lat, lng, heightMeters);
+  const sun = await getJplAltAz("10", date, lat, lng, heightMeters);
+
+  if (!moon) return null;
+
+  const elongation =
+    moon && sun
+      ? angularSeparationFromAltAz(
+          moon.altitude,
+          moon.azimuth,
+          sun.altitude,
+          sun.azimuth
+        )
+      : null;
+
+  return {
+    moon,
+    sun,
+    elongation,
+    source: "NASA JPL Horizons",
+  };
 }
 
 function moonCalcLocal(
@@ -247,26 +284,32 @@ async function moonCalc(
   const local: any = moonCalcLocal(date, observer, baseNewMoon);
 
   if (local.invalid) return local;
-
   if (!useJpl) return local;
 
-  const jpl = await getJplAltAz(floorToMinute(date), lat, lng, heightMeters);
+  const jpl = await getJplMoonSunData(floorToMinute(date), lat, lng, heightMeters);
 
   if (!jpl) return local;
+
+  const jplElongation =
+    typeof jpl.elongation === "number" && Number.isFinite(jpl.elongation)
+      ? jpl.elongation
+      : local.numeric.elongation;
 
   return {
     ...local,
 
-    azimuth: fmt(jpl.azimuth),
-    altitude: fmt(jpl.altitude),
+    azimuth: fmt(jpl.moon.azimuth),
+    altitude: fmt(jpl.moon.altitude),
+    elongation: fmt(jplElongation),
 
     accuracySource: "NASA JPL Horizons",
     jplVerified: true,
 
     numeric: {
       ...local.numeric,
-      altitude: jpl.altitude,
-      azimuth: jpl.azimuth,
+      altitude: jpl.moon.altitude,
+      azimuth: jpl.moon.azimuth,
+      elongation: jplElongation,
     },
   };
 }
@@ -437,7 +480,7 @@ async function findUpcomingHilal(
           "أفضل وقت للهلال لا يُحسب قبل الاقتران.",
           "تم منع الارتفاع السالب.",
           "تم منع المكث غير المنطقي.",
-          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفره.",
+          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفره.",
         ],
       },
     };
@@ -496,7 +539,7 @@ async function customObservation(
       ok: true,
       notes: [
         "تم حساب العمر من آخر اقتران سابق لوقت الرصد المدخل.",
-        "تم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفره.",
+        "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفره.",
       ],
     },
   };
@@ -578,7 +621,7 @@ export async function GET(request: Request) {
         ok: true,
         primaryExternalReference: "NASA JPL Horizons",
         jplUsage:
-          "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه عند توفر الاتصال.",
+          "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة عند توفر الاتصال.",
         rules: [
           "كل عمر قمر يُحسب من الاقتران المناسب للقسم.",
           "حالة القمر الآن تستخدم آخر اقتران سابق للوقت الحالي.",
