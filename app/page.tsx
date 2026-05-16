@@ -355,7 +355,6 @@ export default function Page() {
                   borderRadius: 14,
                   padding: 16,
                   lineHeight: 1.8,
-                  direction: "ltr",
                   textAlign: "center",
                 }}
               >
@@ -604,6 +603,7 @@ export default function Page() {
                 ...inputStyle,
                 maxWidth: 420,
                 textAlign: "center",
+                filter: "invert(1)",
               }}
             />
           </div>
@@ -792,6 +792,8 @@ const inputStyle: React.CSSProperties =
       "1px solid rgba(255,255,255,.15)",
     background: "#020617",
     color: "white",
+    colorScheme: "dark",
+    accentColor: "#ffffff",
     fontSize: 20,
     boxSizing: "border-box",
     textAlign: "center",
