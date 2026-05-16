@@ -187,12 +187,17 @@ async function getJplMoonData(
 
 function hijriMonthTitle(date: Date) {
   try {
-    const formatter = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
-      month: "long",
-      year: "numeric",
-    });
+    const nextHijriDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
 
-    const parts = formatter.formatToParts(date);
+    const formatter = new Intl.DateTimeFormat(
+      "ar-SA-u-ca-islamic-umalqura",
+      {
+        month: "long",
+        year: "numeric",
+      }
+    );
+
+    const parts = formatter.formatToParts(nextHijriDay);
 
     const month =
       parts.find((p) => p.type === "month")?.value || "";
