@@ -25,7 +25,9 @@ function fmtDate(iso?: string) {
 
 function fmtDay(iso?: string) {
   if (!iso) return "-";
-  return new Date(iso).toLocaleDateString("ar-SA", { weekday: "long" });
+  return new Date(iso).toLocaleDateString("ar-SA", {
+    weekday: "long",
+  });
 }
 
 function fmtTime(iso?: string) {
@@ -93,14 +95,23 @@ export default function Page() {
         setLat(pos.coords.latitude.toFixed(6));
         setLng(pos.coords.longitude.toFixed(6));
 
-        if (pos.coords.altitude !== null && Number.isFinite(pos.coords.altitude)) {
+        if (
+          pos.coords.altitude !== null &&
+          Number.isFinite(pos.coords.altitude)
+        ) {
           setHeight(pos.coords.altitude.toFixed(0));
         }
 
-        setGpsStatus(`تم تحديد موقعك الحالي بدقة تقريبية ${Math.round(pos.coords.accuracy)} متر`);
+        setGpsStatus(
+          `تم تحديد موقعك الحالي بدقة تقريبية ${Math.round(
+            pos.coords.accuracy
+          )} متر`
+        );
       },
       () => {
-        setGpsStatus("تعذر تحديد الموقع. تأكد من تفعيل إذن الموقع أو أدخل الإحداثيات يدويًا.");
+        setGpsStatus(
+          "تعذر تحديد الموقع. تأكد من تفعيل إذن الموقع أو أدخل الإحداثيات يدويًا."
+        );
       },
       {
         enableHighAccuracy: true,
@@ -128,7 +139,9 @@ export default function Page() {
         `/api/hilal?lat=${encodeURIComponent(lat)}` +
         `&lng=${encodeURIComponent(lng)}` +
         `&height=${encodeURIComponent(height || "0")}` +
-        (observeTime ? `&observeTime=${encodeURIComponent(localToIso(observeTime))}` : "");
+        (observeTime
+          ? `&observeTime=${encodeURIComponent(localToIso(observeTime))}`
+          : "");
 
       const res = await fetch(url);
       const data = await res.json();
@@ -147,7 +160,7 @@ export default function Page() {
     }
   }
 
-  const sunsetData = result?.hilal?.sunsetData;
+  const nowData = result?.nowData;
   const visualBest = result?.hilal?.visualBest;
   const custom = result?.custom;
 
@@ -157,7 +170,9 @@ export default function Page() {
         <header style={styles.header}>
           <div style={styles.moon}>🌙</div>
           <h1 style={styles.title}>مرصد الهلال</h1>
-          <p style={styles.subtitle}>حسابات فلكية دقيقة للهلال حسب موقعك الحالي والوقت</p>
+          <p style={styles.subtitle}>
+            حسابات فلكية دقيقة للهلال حسب موقعك الحالي والوقت
+          </p>
         </header>
 
         <section style={styles.inputCard}>
@@ -186,36 +201,49 @@ export default function Page() {
           </button>
         </section>
 
-        {sunsetData && (
+        {nowData && (
           <section style={styles.greenCard}>
-            <h2 style={styles.bigHeading}>🌇 الحسابات الفلكية وقت الغروب</h2>
+            <h2 style={styles.bigHeading}>🌙 حالة القمر الآن حسب موقعك</h2>
 
             <div style={styles.grid}>
-              <Result label="غروب الشمس" value={fmtTime(result.hilal.sunsetIso)} icon="🌇" green />
-              <Result label="غروب القمر" value={fmtTime(result.hilal.moonsetIso)} icon="🌙" green />
-              <Result label="مكث القمر" value={`${result.hilal.lag} دقيقة`} icon="⌛" green />
-              <Result label="ارتفاع الهلال" value={`${sunsetData.altitude}°`} icon="△" green />
-              <Result label="الاتجاه بالبوصلة" value={`${sunsetData.azimuth}° - ${directionName(sunsetData.azimuth)}`} icon="🧭" green />
-              <Result label="عمر الهلال" value={sunsetData.ageText} icon="☾" green />
-              <Result label="الاستطالة" value={`${sunsetData.elongation}°`} icon="☼" green />
-              <Result label="الإضاءة" value={`${sunsetData.illumination}%`} icon="🌙" green />
+              <Result label="التاريخ" value={fmtDate(nowData.iso)} icon="📅" green />
+              <Result label="اليوم" value={fmtDay(nowData.iso)} icon="🗓️" green />
+              <Result label="الساعة" value={fmtTime(nowData.iso)} icon="🕒" green />
+              <Result label="ارتفاع القمر الآن" value={`${nowData.altitude}°`} icon="△" green />
+              <Result
+                label="اتجاه القمر الآن"
+                value={`${nowData.azimuth}° - ${directionName(nowData.azimuth)}`}
+                icon="🧭"
+                green
+              />
+              <Result label="عمر القمر الآن" value={nowData.ageText} icon="☾" green />
+              <Result label="الاستطالة الآن" value={`${nowData.elongation}°`} icon="☼" green />
+              <Result label="الإضاءة الآن" value={`${nowData.illumination}%`} icon="🌙" green />
             </div>
           </section>
         )}
 
         {visualBest && (
           <section style={styles.orangeCard}>
-            <h2 style={styles.bigHeading}>👁️ أفضل وقت بصري تقريبي للرؤية</h2>
+            <h2 style={styles.bigHeading}>👁️ أفضل وقت لرصد هلال بداية الشهر</h2>
 
             <div style={styles.grid}>
               <Result label="التاريخ" value={fmtDate(visualBest.iso)} icon="📅" orange />
               <Result label="اليوم" value={fmtDay(visualBest.iso)} icon="🗓️" orange />
               <Result label="الساعة" value={fmtTime(visualBest.iso)} icon="🕒" orange />
-              <Result label="الاتجاه بالبوصلة" value={`${visualBest.azimuth}° - ${directionName(visualBest.azimuth)}`} icon="🧭" orange />
               <Result label="ارتفاع الهلال" value={`${visualBest.altitude}°`} icon="△" orange />
+              <Result
+                label="اتجاه الهلال"
+                value={`${visualBest.azimuth}° - ${directionName(visualBest.azimuth)}`}
+                icon="🧭"
+                orange
+              />
               <Result label="عمر الهلال" value={visualBest.ageText} icon="☾" orange />
               <Result label="الاستطالة" value={`${visualBest.elongation}°`} icon="☼" orange />
               <Result label="الإضاءة" value={`${visualBest.illumination}%`} icon="🌙" orange />
+              <Result label="غروب الشمس" value={fmtTime(result.hilal.sunsetIso)} icon="🌇" orange />
+              <Result label="غروب القمر" value={fmtTime(result.hilal.moonsetIso)} icon="🌙" orange />
+              <Result label="مكث القمر" value={`${result.hilal.lag} دقيقة`} icon="⌛" orange />
             </div>
           </section>
         )}
@@ -251,14 +279,19 @@ export default function Page() {
               <Result label="الاستطالة" value={`${custom.elongation}°`} icon="☼" blue />
               <Result label="الإضاءة" value={`${custom.illumination}%`} icon="🌙" blue />
               <Result label="عمر الهلال" value={custom.ageText} icon="☾" blue />
-              <Result label="اتجاه الهلال" value={`${custom.azimuth}° - ${directionName(custom.azimuth)}`} icon="🧭" blue />
+              <Result
+                label="اتجاه الهلال"
+                value={`${custom.azimuth}° - ${directionName(custom.azimuth)}`}
+                icon="🧭"
+                blue
+              />
               <Result label="مكث القمر المتبقي" value={`${custom.remainingMoonset} دقيقة`} icon="⌛" blue />
             </div>
           )}
         </section>
 
         <div style={styles.note}>
-          ℹ️ تم فصل الحسابات وقت الغروب عن أفضل وقت بصري وعن تحليل وقت الرصد الحقيقي.
+          ℹ️ تم فصل حالة القمر الآن عن أفضل وقت لرصد هلال بداية الشهر وعن تحليل وقت الرصد الحقيقي.
         </div>
       </div>
     </main>
