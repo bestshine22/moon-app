@@ -179,6 +179,7 @@ export default function Page() {
   const nowData = result?.nowData;
   const visualBest = result?.hilal?.visualBest;
   const custom = result?.custom;
+  const hilalTitle = result?.hilal?.monthTitle || "معطيات الهلال";
 
   return (
     <main style={pageStyle}>
@@ -191,9 +192,7 @@ export default function Page() {
             حسابات فلكية دقيقة للهلال حسب موقعك والوقت
           </p>
 
-          <p style={nasaStatusStyle}>
-            NASA JPL ACTIVE
-          </p>
+          <p style={nasaStatusStyle}>NASA JPL ACTIVE</p>
         </header>
 
         <section style={inputCardStyle}>
@@ -234,7 +233,12 @@ export default function Page() {
               ["التاريخ", fmtDate(nowData.iso), "📅"],
               ["اليوم", fmtDay(nowData.iso), "🗓️"],
               ["الساعة", fmtTime(nowData.iso), "🕒"],
-              ["ارتفاع القمر الآن", `${nowData.altitude}°`, "△", nowData.jplVerified],
+              [
+                "ارتفاع القمر الآن",
+                `${nowData.altitude}°`,
+                "△",
+                nowData.jplVerified,
+              ],
               [
                 "اتجاه القمر الآن",
                 `${nowData.azimuth}° - ${directionName(nowData.azimuth)}`,
@@ -242,21 +246,36 @@ export default function Page() {
                 nowData.jplVerified,
               ],
               ["عمر القمر الآن", nowData.ageText, "☾"],
-              ["الاستطالة الآن", `${nowData.elongation}°`, "☼", nowData.jplVerified],
-              ["الإضاءة الآن", `${nowData.illumination}%`, "🌙"],
+              [
+                "الاستطالة الآن",
+                `${nowData.elongation}°`,
+                "☼",
+                nowData.jplVerified,
+              ],
+              [
+                "الإضاءة الآن",
+                `${nowData.illumination}%`,
+                "🌙",
+                nowData.jplVerified,
+              ],
             ]}
           />
         )}
 
         {visualBest && (
           <Section
-            title="👁️ أفضل وقت لرصد هلال بداية الشهر"
+            title={`👁️ ${hilalTitle}`}
             color="#fb923c"
             data={[
               ["التاريخ", fmtDate(visualBest.iso), "📅"],
               ["اليوم", fmtDay(visualBest.iso), "🗓️"],
               ["الساعة", fmtTime(visualBest.iso), "🕒"],
-              ["ارتفاع الهلال", `${visualBest.altitude}°`, "△", visualBest.jplVerified],
+              [
+                "ارتفاع الهلال",
+                `${visualBest.altitude}°`,
+                "△",
+                visualBest.jplVerified,
+              ],
               [
                 "اتجاه الهلال",
                 `${visualBest.azimuth}° - ${directionName(
@@ -266,8 +285,18 @@ export default function Page() {
                 visualBest.jplVerified,
               ],
               ["عمر الهلال", visualBest.ageText, "☾"],
-              ["الاستطالة", `${visualBest.elongation}°`, "☼", visualBest.jplVerified],
-              ["الإضاءة", `${visualBest.illumination}%`, "🌙"],
+              [
+                "الاستطالة",
+                `${visualBest.elongation}°`,
+                "☼",
+                visualBest.jplVerified,
+              ],
+              [
+                "الإضاءة",
+                `${visualBest.illumination}%`,
+                "🌙",
+                visualBest.jplVerified,
+              ],
               ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
               ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
               ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
@@ -307,9 +336,24 @@ export default function Page() {
               color="#60a5fa"
               data={[
                 ["وقت الرصد", fmtTime(custom.iso), "🕒"],
-                ["ارتفاع الهلال", `${custom.altitude}°`, "△", custom.jplVerified],
-                ["الاستطالة", `${custom.elongation}°`, "☼", custom.jplVerified],
-                ["الإضاءة", `${custom.illumination}%`, "🌙"],
+                [
+                  "ارتفاع الهلال",
+                  `${custom.altitude}°`,
+                  "△",
+                  custom.jplVerified,
+                ],
+                [
+                  "الاستطالة",
+                  `${custom.elongation}°`,
+                  "☼",
+                  custom.jplVerified,
+                ],
+                [
+                  "الإضاءة",
+                  `${custom.illumination}%`,
+                  "🌙",
+                  custom.jplVerified,
+                ],
                 ["عمر الهلال", custom.ageText, "☾"],
                 [
                   "اتجاه الهلال",
@@ -328,7 +372,9 @@ export default function Page() {
         </section>
 
         <div style={noteStyle}>
-          🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL Horizons عند توفر الاتصال.
+          🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
+          Horizons عند توفر الاتصال. ولا ينتقل التطبيق لهلال الشهر التالي إلا
+          بعد مرور 7 أيام من ولادة الهلال الحالي.
         </div>
       </div>
     </main>

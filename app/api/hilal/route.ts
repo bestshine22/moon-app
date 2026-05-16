@@ -3,6 +3,7 @@ import * as Astronomy from "astronomy-engine";
 
 const MAX_MOON_AGE_HOURS = 29.6 * 24;
 const MAX_REASONABLE_LAG_MINUTES = 18 * 60;
+const KEEP_CURRENT_HILAL_DAYS = 7;
 
 function fmt(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "-";
@@ -66,6 +67,23 @@ function searchNewMoonBefore(date: Date) {
   }
 
   throw new Error("تعذر العثور على الاقتران السابق");
+}
+
+function chooseHilalNewMoon(now: Date) {
+  const previous = searchNewMoonBefore(now);
+  const ageDays = (now.getTime() - previous.getTime()) / 86400_000;
+
+  if (ageDays <= KEEP_CURRENT_HILAL_DAYS) {
+    return {
+      newMoon: previous,
+      mode: "current_hilal",
+    };
+  }
+
+  return {
+    newMoon: searchNewMoonAfter(now),
+    mode: "next_hilal",
+  };
 }
 
 function validateMoonAge(ageHours: number) {
@@ -164,6 +182,27 @@ async function getJplMoonData(
     };
   } catch {
     return null;
+  }
+}
+
+function hijriMonthTitle(date: Date) {
+  try {
+    const formatter = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
+      month: "long",
+      year: "numeric",
+    });
+
+    const parts = formatter.formatToParts(date);
+
+    const month =
+      parts.find((p) => p.type === "month")?.value || "";
+
+    const year =
+      parts.find((p) => p.type === "year")?.value || "";
+
+    return `معطيات هلال شهر ${month} ${year}`;
+  } catch {
+    return "معطيات الهلال";
   }
 }
 
@@ -347,14 +386,15 @@ function findSunset(observer: Astronomy.Observer, date: Date) {
   return event ? floorToMinute(event.date) : null;
 }
 
-async function findUpcomingHilal(
+async function findHilalData(
   observer: Astronomy.Observer,
   lat: number,
   lng: number,
   heightMeters: number
 ) {
   const now = floorToMinute(new Date());
-  const newMoon = searchNewMoonAfter(now);
+  const chosen = chooseHilalNewMoon(now);
+  const newMoon = chosen.newMoon;
 
   for (let day = 0; day <= 5; day++) {
     const candidateDate = new Date(newMoon);
@@ -426,7 +466,8 @@ async function findUpcomingHilal(
     const illumCheck = illuminationCheckLocal(observer, newMoon, sunset);
 
     return {
-      kind: "upcoming_hilal",
+      kind: chosen.mode,
+      monthTitle: hijriMonthTitle(bestDate),
       newMoonIso: newMoon.toISOString(),
       sunsetIso: sunset.toISOString(),
       moonsetIso: moonset.toISOString(),
@@ -437,13 +478,19 @@ async function findUpcomingHilal(
         ok: true,
         illuminationCheck: illumCheck,
         notes: [
-          "أفضل وقت للهلال لا يُحسب قبل الاقتران.",
+          "لا يتم الانتقال لهلال الشهر التالي إلا بعد مرور 7 أيام من ولادة الهلال الحالي.",
           "تم منع الارتفاع السالب.",
           "تم منع المكث غير المنطقي.",
           "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
         ],
       },
     };
+  }
+
+  if (chosen.mode === "current_hilal") {
+    const nextNewMoon = searchNewMoonAfter(now);
+
+    return null;
   }
 
   return null;
@@ -542,7 +589,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const hilal = await findUpcomingHilal(observer, lat, lng, heightMeters);
+    const hilal = await findHilalData(observer, lat, lng, heightMeters);
 
     if (!hilal) {
       return NextResponse.json({
@@ -578,6 +625,8 @@ export async function GET(request: Request) {
         primaryExternalReference: "NASA JPL Horizons",
         jplUsage:
           "يتم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفر الاتصال.",
+        hilalSwitchRule:
+          "لا ينتقل التطبيق لهلال الشهر التالي إلا بعد مرور 7 أيام من ولادة الهلال الحالي.",
         rules: [
           "العمر يُحسب من الاقتران المناسب.",
           "المكث يُحسب من غروب القمر وغروب الشمس محليًا.",
