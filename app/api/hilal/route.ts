@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import * as Astronomy from "astronomy-engine";
 
+const MAX_MOON_AGE_HOURS = 29.6 * 24;
+const MAX_REASONABLE_LAG_MINUTES = 18 * 60;
+
 function fmt(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "-";
 }
@@ -24,14 +27,11 @@ function ageText(hours: number) {
   const m = Math.floor((rest % 3600) / 60);
   const s = rest % 60;
 
-  if (days >= 1) {
-    return `${days} يوم ${h} ساعة ${m} دقيقة`;
-  }
-
+  if (days >= 1) return `${days} يوم ${h} ساعة ${m} دقيقة`;
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
-function nextNewMoon(date: Date) {
+function searchNewMoonAfter(date: Date) {
   return Astronomy.SearchMoonPhase(
     0,
     new Astronomy.AstroTime(date),
@@ -39,43 +39,56 @@ function nextNewMoon(date: Date) {
   ).date;
 }
 
-function previousNewMoon(date: Date) {
-  let start = new Date(date.getTime() - 45 * 24 * 60 * 60 * 1000);
+function searchNewMoonBefore(date: Date) {
+  let start = new Date(date.getTime() - 40 * 86400_000);
 
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let i = 0; i < 12; i++) {
     let candidate = Astronomy.SearchMoonPhase(
       0,
       new Astronomy.AstroTime(start),
       80
     ).date;
 
-    let latestBefore: Date | null = candidate <= date ? candidate : null;
+    let last: Date | null = null;
 
     while (candidate <= date) {
-      latestBefore = candidate;
+      last = candidate;
 
       candidate = Astronomy.SearchMoonPhase(
         0,
-        new Astronomy.AstroTime(new Date(candidate.getTime() + 60 * 60 * 1000)),
+        new Astronomy.AstroTime(new Date(candidate.getTime() + 3600_000)),
         80
       ).date;
     }
 
-    if (latestBefore) return latestBefore;
+    if (last) return last;
 
-    start = new Date(start.getTime() - 45 * 24 * 60 * 60 * 1000);
+    start = new Date(start.getTime() - 40 * 86400_000);
   }
 
-  throw new Error("تعذر حساب الاقتران السابق لهذا التاريخ");
+  throw new Error("تعذر العثور على الاقتران السابق");
 }
 
-function moonCalc(
-  date: Date,
-  observer: Astronomy.Observer,
-  ageBaseNewMoon?: Date
-) {
+function validateMoonAge(ageHours: number) {
+  return ageHours >= 0 && ageHours <= MAX_MOON_AGE_HOURS;
+}
+
+function moonCalc(date: Date, observer: Astronomy.Observer, baseNewMoon?: Date) {
   const cleanDate = floorToMinute(date);
-  const base = ageBaseNewMoon ?? previousNewMoon(cleanDate);
+  const newMoon = baseNewMoon ?? searchNewMoonBefore(cleanDate);
+
+  const ageHours = (cleanDate.getTime() - newMoon.getTime()) / 3600000;
+
+  if (!validateMoonAge(ageHours)) {
+    return {
+      invalid: true,
+      error: "عمر القمر غير منطقي، تحقق من تاريخ الاقتران المستخدم.",
+      iso: cleanDate.toISOString(),
+      ageBaseNewMoonIso: newMoon.toISOString(),
+      ageHours: fmt(ageHours),
+    };
+  }
+
   const time = new Astronomy.AstroTime(cleanDate);
 
   const moonEq = Astronomy.Equator(
@@ -96,36 +109,65 @@ function moonCalc(
 
   const elongation = Astronomy.AngleFromSun(Astronomy.Body.Moon, time);
   const illumination = Astronomy.Illumination(Astronomy.Body.Moon, time);
-
-  const ageHours = (cleanDate.getTime() - base.getTime()) / 3600000;
+  const illumPercent = illumination.phase_fraction * 100;
 
   return {
+    invalid: false,
     iso: cleanDate.toISOString(),
-    ageBaseNewMoonIso: base.toISOString(),
+    ageBaseNewMoonIso: newMoon.toISOString(),
+
     azimuth: fmt(moonHor.azimuth),
     altitude: fmt(moonHor.altitude),
     ageText: ageText(ageHours),
     ageHours: fmt(ageHours),
     elongation: fmt(elongation),
-    illumination: fmt(illumination.phase_fraction * 100),
+    illumination: fmt(illumPercent),
+
     numeric: {
       altitude: moonHor.altitude,
       azimuth: moonHor.azimuth,
       ageHours,
       elongation,
-      illumination: illumination.phase_fraction * 100,
+      illumination: illumPercent,
     },
   };
 }
 
-function findMoonsetAfter(observer: Astronomy.Observer, startDate: Date) {
-  const moonInfo = moonCalc(startDate, observer);
+function illuminationCheck(
+  observer: Astronomy.Observer,
+  newMoon: Date,
+  checkTime: Date
+) {
+  const t1 = floorToMinute(checkTime);
+  const t2 = addMinutes(t1, 30);
 
-  if (moonInfo.numeric.altitude <= 0) {
+  const a: any = moonCalc(t1, observer, newMoon);
+  const b: any = moonCalc(t2, observer, newMoon);
+
+  if (a.invalid || b.invalid) {
+    return {
+      ok: false,
+      note: "تعذر فحص تغير الإضاءة.",
+    };
+  }
+
+  return {
+    ok: b.numeric.illumination >= a.numeric.illumination,
+    note:
+      b.numeric.illumination >= a.numeric.illumination
+        ? "الإضاءة تزداد بشكل منطقي بعد الاقتران."
+        : "تحذير: الإضاءة لا تزداد كما هو متوقع بعد الاقتران.",
+  };
+}
+
+function findMoonsetAfter(observer: Astronomy.Observer, startDate: Date) {
+  const startInfo: any = moonCalc(startDate, observer);
+
+  if (startInfo.invalid || startInfo.numeric.altitude <= 0) {
     return null;
   }
 
-  const moonsetEvent = Astronomy.SearchRiseSet(
+  const event = Astronomy.SearchRiseSet(
     Astronomy.Body.Moon,
     observer,
     -1,
@@ -133,54 +175,53 @@ function findMoonsetAfter(observer: Astronomy.Observer, startDate: Date) {
     1
   );
 
-  if (!moonsetEvent) return null;
+  if (!event) return null;
 
-  const moonset = floorToMinute(moonsetEvent.date);
+  const moonset = floorToMinute(event.date);
   const diff = (moonset.getTime() - startDate.getTime()) / 60000;
 
-  if (diff <= 0 || diff > 240) return null;
+  if (diff <= 0 || diff > MAX_REASONABLE_LAG_MINUTES) return null;
 
   return moonset;
 }
 
+function findSunset(observer: Astronomy.Observer, date: Date) {
+  const dayStart = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0
+  );
+
+  const event = Astronomy.SearchRiseSet(
+    Astronomy.Body.Sun,
+    observer,
+    -1,
+    new Astronomy.AstroTime(dayStart),
+    2
+  );
+
+  return event ? floorToMinute(event.date) : null;
+}
+
 function findUpcomingHilal(observer: Astronomy.Observer) {
   const now = floorToMinute(new Date());
-
-  /*
-    هذا القسم خاص فقط بهلال بداية الشهر القادم من وقت اليوم.
-    لا يتأثر بوقت الرصد اليدوي.
-  */
-  const newMoon = nextNewMoon(now);
+  const newMoon = searchNewMoonAfter(now);
 
   for (let day = 0; day <= 5; day++) {
-    const d = new Date(newMoon);
-    d.setDate(d.getDate() + day);
+    const candidateDate = new Date(newMoon);
+    candidateDate.setDate(candidateDate.getDate() + day);
 
-    const dayStart = new Date(
-      d.getFullYear(),
-      d.getMonth(),
-      d.getDate(),
-      0,
-      0,
-      0
-    );
-
-    const sunsetEvent = Astronomy.SearchRiseSet(
-      Astronomy.Body.Sun,
-      observer,
-      -1,
-      new Astronomy.AstroTime(dayStart),
-      2
-    );
-
-    if (!sunsetEvent) continue;
-
-    const sunset = floorToMinute(sunsetEvent.date);
+    const sunset = findSunset(observer, candidateDate);
+    if (!sunset) continue;
 
     if (sunset <= newMoon) continue;
 
-    const sunsetData = moonCalc(sunset, observer, newMoon);
+    const sunsetData: any = moonCalc(sunset, observer, newMoon);
 
+    if (sunsetData.invalid) continue;
     if (sunsetData.numeric.ageHours < 8) continue;
     if (sunsetData.numeric.ageHours > 48) continue;
     if (sunsetData.numeric.altitude <= 0) continue;
@@ -194,14 +235,11 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
 
     let visualBest: any = null;
 
-    /*
-      أفضل وقت بصري: بعد الغروب بدقائق قليلة.
-      لا نسمح بوقت متأخر جدًا حتى لا يهبط القمر كثيرًا.
-    */
     for (let minute = 3; minute <= Math.min(20, lag - 2); minute++) {
       const t = floorToMinute(addMinutes(sunset, minute));
-      const info = moonCalc(t, observer, newMoon);
+      const info: any = moonCalc(t, observer, newMoon);
 
+      if (info.invalid) continue;
       if (info.numeric.ageHours < 8) continue;
       if (info.numeric.ageHours > 48) continue;
       if (info.numeric.altitude <= 0) continue;
@@ -213,31 +251,78 @@ function findUpcomingHilal(observer: Astronomy.Observer) {
         Math.abs(minute - 8) * 0.9;
 
       if (!visualBest || score > visualBest.score) {
-        visualBest = {
-          score,
-          data: info,
-        };
+        visualBest = { score, data: info };
       }
     }
 
-    if (!visualBest) {
-      visualBest = {
-        score: 0,
-        data: sunsetData,
-      };
-    }
+    const illumCheck = illuminationCheck(observer, newMoon, sunset);
 
     return {
+      kind: "upcoming_hilal",
       newMoonIso: newMoon.toISOString(),
       sunsetIso: sunset.toISOString(),
       moonsetIso: moonset.toISOString(),
       lag: lag.toFixed(1),
       sunsetData,
-      visualBest: visualBest.data,
+      visualBest: visualBest?.data ?? sunsetData,
+      validation: {
+        ok: true,
+        illuminationCheck: illumCheck,
+        notes: [
+          "أفضل وقت للهلال لا يُحسب قبل الاقتران.",
+          "تم منع الارتفاع السالب.",
+          "تم منع المكث غير المنطقي.",
+          "تم استخدام اقتران الهلال القادم فقط لهذا القسم.",
+        ],
+      },
     };
   }
 
   return null;
+}
+
+function customObservation(
+  observer: Astronomy.Observer,
+  observeTime: string
+) {
+  const customDate = floorToMinute(new Date(observeTime));
+
+  if (Number.isNaN(customDate.getTime())) {
+    return {
+      invalid: true,
+      error: "وقت الرصد غير صحيح.",
+    };
+  }
+
+  const previous = searchNewMoonBefore(customDate);
+  const data: any = moonCalc(customDate, observer, previous);
+
+  if (data.invalid) return data;
+
+  const moonset = findMoonsetAfter(observer, customDate);
+
+  let remainingMoonset = "0.0";
+
+  if (moonset) {
+    const remaining = (moonset.getTime() - customDate.getTime()) / 60000;
+
+    remainingMoonset =
+      remaining > 0 && remaining <= MAX_REASONABLE_LAG_MINUTES
+        ? remaining.toFixed(1)
+        : "0.0";
+  }
+
+  return {
+    ...data,
+    remainingMoonset,
+    validation: {
+      ok: true,
+      notes: [
+        "تم حساب العمر من آخر اقتران سابق لوقت الرصد المدخل.",
+        "لن يتجاوز العمر شهرًا قمريًا طبيعيًا.",
+      ],
+    },
+  };
 }
 
 export async function GET(request: Request) {
@@ -262,19 +347,16 @@ export async function GET(request: Request) {
       Number.isFinite(height) ? height : 0
     );
 
-    /*
-      القسم الأول:
-      حالة القمر الآن فقط.
-      يستخدم آخر اقتران قبل الآن.
-    */
     const now = floorToMinute(new Date());
-    const nowData = moonCalc(now, observer);
+    const nowData: any = moonCalc(now, observer);
 
-    /*
-      القسم الثاني:
-      أفضل وقت لرصد هلال بداية الشهر القادم.
-      لا علاقة له بوقت الرصد اليدوي.
-    */
+    if (nowData.invalid) {
+      return NextResponse.json({
+        error: nowData.error,
+        nowData,
+      });
+    }
+
     const hilal = findUpcomingHilal(observer);
 
     if (!hilal) {
@@ -283,33 +365,10 @@ export async function GET(request: Request) {
       });
     }
 
-    /*
-      القسم الثالث:
-      تحليل وقت الرصد الحقيقي.
-      يستخدم آخر اقتران قبل وقت الرصد المدخل.
-    */
     let custom = null;
 
     if (observeTime) {
-      const customDate = floorToMinute(new Date(observeTime));
-      const customData: any = moonCalc(customDate, observer);
-
-      const moonsetAfterCustom = findMoonsetAfter(observer, customDate);
-
-      let remainingMoonset = "0.0";
-
-      if (moonsetAfterCustom) {
-        const remaining =
-          (moonsetAfterCustom.getTime() - customDate.getTime()) / 60000;
-
-        remainingMoonset =
-          remaining > 0 && remaining <= 240 ? remaining.toFixed(1) : "0.0";
-      }
-
-      custom = {
-        ...customData,
-        remainingMoonset,
-      };
+      custom = customObservation(observer, observeTime);
     }
 
     return NextResponse.json({
@@ -318,9 +377,25 @@ export async function GET(request: Request) {
         lng,
         height,
       },
+
       nowData,
+
       hilal,
+
       custom,
+
+      engineValidation: {
+        ok: true,
+        rules: [
+          "كل عمر قمر يُحسب من الاقتران المناسب للقسم.",
+          "حالة القمر الآن تستخدم آخر اقتران سابق للوقت الحالي.",
+          "أفضل وقت للهلال يستخدم الاقتران القادم فقط.",
+          "تحليل وقت الرصد يستخدم آخر اقتران سابق لوقت الرصد.",
+          "تم منع عمر أكبر من 29.6 يوم.",
+          "تم منع المكث غير المنطقي.",
+          "تم منع اختيار هلال قبل الاقتران.",
+        ],
+      },
     });
   } catch (err: any) {
     return NextResponse.json(
