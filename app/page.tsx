@@ -186,20 +186,14 @@ export default function Page() {
         <header style={headerStyle}>
           <div style={{ fontSize: 70 }}>🌙</div>
           <h1 style={titleStyle}>مرصد الهلال</h1>
+
           <p style={subtitleStyle}>
             حسابات فلكية دقيقة للهلال حسب موقعك والوقت
           </p>
-<p
-  style={{
-    textAlign: "center",
-    color: "#22c55e",
-    fontSize: 18,
-    fontWeight: 900,
-    marginTop: 10,
-  }}
->
-  NASA JPL ACTIVE
-</p>
+
+          <p style={nasaStatusStyle}>
+            NASA JPL ACTIVE
+          </p>
         </header>
 
         <section style={inputCardStyle}>
@@ -240,14 +234,15 @@ export default function Page() {
               ["التاريخ", fmtDate(nowData.iso), "📅"],
               ["اليوم", fmtDay(nowData.iso), "🗓️"],
               ["الساعة", fmtTime(nowData.iso), "🕒"],
-              ["ارتفاع القمر الآن", `${nowData.altitude}°`, "△"],
+              ["ارتفاع القمر الآن", `${nowData.altitude}°`, "△", nowData.jplVerified],
               [
                 "اتجاه القمر الآن",
                 `${nowData.azimuth}° - ${directionName(nowData.azimuth)}`,
                 "🧭",
+                nowData.jplVerified,
               ],
               ["عمر القمر الآن", nowData.ageText, "☾"],
-              ["الاستطالة الآن", `${nowData.elongation}°`, "☼"],
+              ["الاستطالة الآن", `${nowData.elongation}°`, "☼", nowData.jplVerified],
               ["الإضاءة الآن", `${nowData.illumination}%`, "🌙"],
             ]}
           />
@@ -261,16 +256,17 @@ export default function Page() {
               ["التاريخ", fmtDate(visualBest.iso), "📅"],
               ["اليوم", fmtDay(visualBest.iso), "🗓️"],
               ["الساعة", fmtTime(visualBest.iso), "🕒"],
-              ["ارتفاع الهلال", `${visualBest.altitude}°`, "△"],
+              ["ارتفاع الهلال", `${visualBest.altitude}°`, "△", visualBest.jplVerified],
               [
                 "اتجاه الهلال",
                 `${visualBest.azimuth}° - ${directionName(
                   visualBest.azimuth
                 )}`,
                 "🧭",
+                visualBest.jplVerified,
               ],
               ["عمر الهلال", visualBest.ageText, "☾"],
-              ["الاستطالة", `${visualBest.elongation}°`, "☼"],
+              ["الاستطالة", `${visualBest.elongation}°`, "☼", visualBest.jplVerified],
               ["الإضاءة", `${visualBest.illumination}%`, "🌙"],
               ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
               ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
@@ -311,14 +307,15 @@ export default function Page() {
               color="#60a5fa"
               data={[
                 ["وقت الرصد", fmtTime(custom.iso), "🕒"],
-                ["ارتفاع الهلال", `${custom.altitude}°`, "△"],
-                ["الاستطالة", `${custom.elongation}°`, "☼"],
+                ["ارتفاع الهلال", `${custom.altitude}°`, "△", custom.jplVerified],
+                ["الاستطالة", `${custom.elongation}°`, "☼", custom.jplVerified],
                 ["الإضاءة", `${custom.illumination}%`, "🌙"],
                 ["عمر الهلال", custom.ageText, "☾"],
                 [
                   "اتجاه الهلال",
                   `${custom.azimuth}° - ${directionName(custom.azimuth)}`,
                   "🧭",
+                  custom.jplVerified,
                 ],
                 [
                   "مكث القمر المتبقي",
@@ -329,6 +326,10 @@ export default function Page() {
             />
           )}
         </section>
+
+        <div style={noteStyle}>
+          🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL Horizons عند توفر الاتصال.
+        </div>
       </div>
     </main>
   );
@@ -356,6 +357,8 @@ function Section({ title, color, data }: any) {
       <div style={resultGridStyle}>
         {data.map((item: any, i: number) => (
           <div key={i} style={resultCardStyle}>
+            {item[3] && <div style={nasaBadgeStyle}>NASA</div>}
+
             <div style={resultLabelStyle}>{item[0]}</div>
             <div style={resultIconStyle}>{item[2]}</div>
             <div style={resultValueStyle}>{item[1]}</div>
@@ -397,6 +400,14 @@ const titleStyle: React.CSSProperties = {
 const subtitleStyle: React.CSSProperties = {
   opacity: 0.85,
   fontWeight: 800,
+};
+
+const nasaStatusStyle: React.CSSProperties = {
+  textAlign: "center",
+  color: "#22c55e",
+  fontSize: 18,
+  fontWeight: 900,
+  marginTop: 10,
 };
 
 const inputCardStyle: React.CSSProperties = {
@@ -561,6 +572,20 @@ const resultCardStyle: React.CSSProperties = {
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
+  position: "relative",
+};
+
+const nasaBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 8,
+  left: 8,
+  background: "#ffffff",
+  color: "#0f172a",
+  borderRadius: 999,
+  padding: "3px 8px",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.5px",
 };
 
 const resultLabelStyle: React.CSSProperties = {
@@ -580,4 +605,15 @@ const resultValueStyle: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 22,
   lineHeight: 1.4,
+};
+
+const noteStyle: React.CSSProperties = {
+  border: "1px solid #22c55e",
+  borderRadius: 18,
+  padding: 16,
+  textAlign: "center",
+  fontSize: 16,
+  fontWeight: 900,
+  marginBottom: 30,
+  background: "rgba(34,197,94,.08)",
 };
