@@ -20,19 +20,12 @@ function ageText(hours: number) {
   const m = Math.floor((rest % 3600) / 60);
   const s = rest % 60;
 
-  if (days >= 1) {
-    return `${days} يوم ${h} ساعة ${m} دقيقة`;
-  }
-
+  if (days >= 1) return `${days} يوم ${h} ساعة ${m} دقيقة`;
   return `${h} ساعة ${m} دقيقة ${s} ثانية`;
 }
 
 function nextNewMoon(date: Date) {
-  return Astronomy.SearchMoonPhase(
-    0,
-    new Astronomy.AstroTime(date),
-    60
-  ).date;
+  return Astronomy.SearchMoonPhase(0, new Astronomy.AstroTime(date), 60).date;
 }
 
 function previousNewMoon(date: Date) {
@@ -45,16 +38,13 @@ function previousNewMoon(date: Date) {
       80
     ).date;
 
-    let latestBefore = candidate <= date ? candidate : null;
+    let latestBefore: Date | null = candidate <= date ? candidate : null;
 
     while (candidate <= date) {
       latestBefore = candidate;
-
       candidate = Astronomy.SearchMoonPhase(
         0,
-        new Astronomy.AstroTime(
-          new Date(candidate.getTime() + 60 * 60 * 1000)
-        ),
+        new Astronomy.AstroTime(new Date(candidate.getTime() + 60 * 60 * 1000)),
         80
       ).date;
     }
@@ -67,100 +57,21 @@ function previousNewMoon(date: Date) {
   throw new Error("تعذر حساب الاقتران السابق لهذا التاريخ");
 }
 
-function moonCalc(date: Date, observer: Astronomy.Observer) {
+function moonCalc(date: Date, observer: Astronomy.Observer, ageBaseNewMoon?: Date) {
   const cleanDate = floorToMinute(date);
-  const ageBaseNewMoon = previousNewMoon(cleanDate);
-
+  const base = ageBaseNewMoon ?? previousNewMoon(cleanDate);
   const time = new Astronomy.AstroTime(cleanDate);
 
-  const moonEq = Astronomy.Equator(
-    Astronomy.Body.Moon,
-    time,
-    observer,
-    true,
-    true
-  );
+  const moonEq = Astronomy.Equator(Astronomy.Body.Moon, time, observer, true, true);
+  const moonHor = Astronomy.Horizon(time, observer, moonEq.ra, moonEq.dec, "normal");
 
-  const moonHor = Astronomy.Horizon(
-    time,
-    observer,
-    moonEq.ra,
-    moonEq.dec,
-    "normal"
-  );
-
-  const elongation = Astronomy.AngleFromSun(
-    Astronomy.Body.Moon,
-    time
-  );
-
-  const illumination = Astronomy.Illumination(
-    Astronomy.Body.Moon,
-    time
-  );
-
-  const ageHours =
-    (cleanDate.getTime() - ageBaseNewMoon.getTime()) / 3600000;
+  const elongation = Astronomy.AngleFromSun(Astronomy.Body.Moon, time);
+  const illumination = Astronomy.Illumination(Astronomy.Body.Moon, time);
+  const ageHours = (cleanDate.getTime() - base.getTime()) / 3600000;
 
   return {
     iso: cleanDate.toISOString(),
-    ageBaseNewMoonIso: ageBaseNewMoon.toISOString(),
-    azimuth: fmt(moonHor.azimuth),
-    altitude: fmt(moonHor.altitude),
-    ageText: ageText(ageHours),
-    ageHours: fmt(ageHours),
-    elongation: fmt(elongation),
-    illumination: fmt(illumination.phase_fraction * 100),
-    numeric: {
-      altitude: moonHor.altitude,
-      azimuth: moonHor.azimuth,
-      ageHours,
-      elongation,
-      illumination: illumination.phase_fraction * 100,
-    },
-  };
-}
-
-function moonCalcFromKnownNewMoon(
-  date: Date,
-  observer: Astronomy.Observer,
-  newMoon: Date
-) {
-  const cleanDate = floorToMinute(date);
-  const time = new Astronomy.AstroTime(cleanDate);
-
-  const moonEq = Astronomy.Equator(
-    Astronomy.Body.Moon,
-    time,
-    observer,
-    true,
-    true
-  );
-
-  const moonHor = Astronomy.Horizon(
-    time,
-    observer,
-    moonEq.ra,
-    moonEq.dec,
-    "normal"
-  );
-
-  const elongation = Astronomy.AngleFromSun(
-    Astronomy.Body.Moon,
-    time
-  );
-
-  const illumination = Astronomy.Illumination(
-    Astronomy.Body.Moon,
-    time
-  );
-
-  const ageHours =
-    (cleanDate.getTime() - newMoon.getTime()) / 3600000;
-
-  return {
-    iso: cleanDate.toISOString(),
-    ageBaseNewMoonIso: newMoon.toISOString(),
+    ageBaseNewMoonIso: base.toISOString(),
     azimuth: fmt(moonHor.azimuth),
     altitude: fmt(moonHor.altitude),
     ageText: ageText(ageHours),
@@ -178,12 +89,18 @@ function moonCalcFromKnownNewMoon(
 }
 
 function findMoonsetAfter(observer: Astronomy.Observer, startDate: Date) {
+  const startInfo = moonCalc(startDate, observer);
+
+  if (startInfo.numeric.altitude <= 0) {
+    return null;
+  }
+
   const moonsetEvent = Astronomy.SearchRiseSet(
     Astronomy.Body.Moon,
     observer,
     -1,
     new Astronomy.AstroTime(startDate),
-    3
+    1
   );
 
   return moonsetEvent ? floorToMinute(moonsetEvent.date) : null;
@@ -216,34 +133,44 @@ function findHilal(observer: Astronomy.Observer, referenceDate: Date) {
     if (!sunsetEvent) continue;
 
     const sunset = floorToMinute(sunsetEvent.date);
-    const moonset = findMoonsetAfter(observer, sunset);
 
+    if (sunset <= newMoon) continue;
+
+    const sunsetData = moonCalc(sunset, observer, newMoon);
+
+    if (sunsetData.numeric.ageHours < 12) continue;
+    if (sunsetData.numeric.ageHours > 45) continue;
+    if (sunsetData.numeric.altitude <= 0) continue;
+
+    const moonset = findMoonsetAfter(observer, sunset);
     if (!moonset) continue;
 
     const lag = (moonset.getTime() - sunset.getTime()) / 60000;
 
-    if (lag <= 0) continue;
+    if (lag <= 0 || lag > 180) continue;
 
     let visualBest: any = null;
 
-    for (let minute = 5; minute <= Math.min(25, lag - 3); minute++) {
+    for (let minute = 3; minute <= Math.min(25, lag - 2); minute++) {
       const t = floorToMinute(new Date(sunset.getTime() + minute * 60000));
+      const info = moonCalc(t, observer, newMoon);
 
-      const info = moonCalcFromKnownNewMoon(t, observer, newMoon);
+      if (info.numeric.ageHours < 12) continue;
+      if (info.numeric.ageHours > 45) continue;
+      if (info.numeric.altitude <= 0) continue;
 
       const score =
         info.numeric.altitude * 3 +
         info.numeric.elongation * 1.5 +
         info.numeric.illumination * 0.4 -
-        Math.abs(minute - 12) * 0.7;
+        Math.abs(minute - 10) * 0.7;
 
       if (!visualBest || score > visualBest.score) {
-        visualBest = {
-          score,
-          data: info,
-        };
+        visualBest = { score, data: info };
       }
     }
+
+    if (!visualBest) continue;
 
     return {
       referenceIso: referenceDate.toISOString(),
@@ -251,9 +178,7 @@ function findHilal(observer: Astronomy.Observer, referenceDate: Date) {
       sunsetIso: sunset.toISOString(),
       moonsetIso: moonset.toISOString(),
       lag: lag.toFixed(1),
-      visualBest:
-        visualBest?.data ??
-        moonCalcFromKnownNewMoon(sunset, observer, newMoon),
+      visualBest: visualBest.data,
     };
   }
 
@@ -302,6 +227,7 @@ export async function GET(request: Request) {
     if (observeTime) {
       const customDate = floorToMinute(new Date(observeTime));
       const customData: any = moonCalc(customDate, observer);
+
       const moonsetAfterCustom = findMoonsetAfter(observer, customDate);
 
       let remainingMoonset = "0.0";
@@ -310,7 +236,7 @@ export async function GET(request: Request) {
         const remaining =
           (moonsetAfterCustom.getTime() - customDate.getTime()) / 60000;
 
-        remainingMoonset = remaining > 0 ? remaining.toFixed(1) : "0.0";
+        remainingMoonset = remaining > 0 && remaining <= 180 ? remaining.toFixed(1) : "0.0";
       }
 
       custom = {
