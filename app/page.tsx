@@ -83,6 +83,7 @@ function DmsText({ value }: { value: string }) {
         unicodeBidi: "isolate",
         display: "inline-block",
         fontFamily: "monospace",
+        fontWeight: 800,
         letterSpacing: "0.3px",
       }}
     >
@@ -182,32 +183,28 @@ export default function Page() {
   return (
     <main style={pageStyle}>
       <div style={containerStyle}>
-        <div style={headerStyle}>
+        <header style={headerStyle}>
           <div style={{ fontSize: 70 }}>🌙</div>
-
           <h1 style={titleStyle}>مرصد الهلال</h1>
-
-          <p style={{ opacity: 0.8 }}>
+          <p style={subtitleStyle}>
             حسابات فلكية دقيقة للهلال حسب موقعك والوقت
           </p>
-        </div>
+        </header>
 
-        <div style={inputCardStyle}>
-          <p style={{ textAlign: "center" }}>📍 {gpsStatus}</p>
+        <section style={inputCardStyle}>
+          <p style={gpsStyle}>📍 {gpsStatus}</p>
 
           <div style={inputGridStyle}>
             <Field label="خط العرض" value={lat} setValue={setLat} />
             <Field label="خط الطول" value={lng} setValue={setLng} />
             <Field label="الارتفاع م" value={height} setValue={setHeight} />
 
-            <div>
+            <div style={fieldWrapStyle}>
               <div style={labelStyle}>الإحداثيات DMS</div>
-
               <div style={dmsBoxStyle}>
                 <div>
                   <DmsText value={decimalToDMS(lat, "lat")} />
                 </div>
-
                 <div>
                   <DmsText value={decimalToDMS(lng, "lng")} />
                 </div>
@@ -222,7 +219,7 @@ export default function Page() {
           <button onClick={calculate} style={btn}>
             {loading ? "جاري الحساب..." : "🔭 احسب"}
           </button>
-        </div>
+        </section>
 
         {nowData && (
           <Section
@@ -271,8 +268,8 @@ export default function Page() {
           />
         )}
 
-        <div style={analysisCardStyle}>
-          <h2 style={{ textAlign: "center" }}>🛰️ تحليل وقت الرصد الحقيقي</h2>
+        <section style={analysisCardStyle}>
+          <h2 style={analysisTitleStyle}>🛰️ تحليل وقت الرصد الحقيقي</h2>
 
           <div style={analysisTextStyle}>
             حسب موقعك الحالي:
@@ -320,7 +317,7 @@ export default function Page() {
               ]}
             />
           )}
-        </div>
+        </section>
       </div>
     </main>
   );
@@ -328,7 +325,7 @@ export default function Page() {
 
 function Field({ label, value, setValue }: any) {
   return (
-    <div>
+    <div style={fieldWrapStyle}>
       <div style={labelStyle}>{label}</div>
 
       <input
@@ -342,31 +339,32 @@ function Field({ label, value, setValue }: any) {
 
 function Section({ title, color, data }: any) {
   return (
-    <div style={sectionStyle(color)}>
+    <section style={sectionStyle(color)}>
       {title && <h2 style={sectionTitleStyle}>{title}</h2>}
 
       <div style={resultGridStyle}>
         {data.map((item: any, i: number) => (
           <div key={i} style={resultCardStyle}>
             <div style={resultLabelStyle}>{item[0]}</div>
-
-            <div style={{ fontSize: 28 }}>{item[2]}</div>
-
+            <div style={resultIconStyle}>{item[2]}</div>
             <div style={resultValueStyle}>{item[1]}</div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
+
+const boxHeight = 78;
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: "radial-gradient(circle at top,#0f172a,#020617 45%,#000)",
   color: "white",
-  fontFamily: "Arial",
+  fontFamily: "Arial, sans-serif",
   direction: "rtl",
   padding: 14,
+  fontWeight: 800,
 };
 
 const containerStyle: React.CSSProperties = {
@@ -382,6 +380,12 @@ const headerStyle: React.CSSProperties = {
 const titleStyle: React.CSSProperties = {
   fontSize: 42,
   margin: 0,
+  fontWeight: 900,
+};
+
+const subtitleStyle: React.CSSProperties = {
+  opacity: 0.85,
+  fontWeight: 800,
 };
 
 const inputCardStyle: React.CSSProperties = {
@@ -391,6 +395,13 @@ const inputCardStyle: React.CSSProperties = {
   marginBottom: 24,
 };
 
+const gpsStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontWeight: 800,
+  fontSize: 18,
+  marginBottom: 22,
+};
+
 const inputGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
@@ -398,32 +409,56 @@ const inputGridStyle: React.CSSProperties = {
   alignItems: "end",
 };
 
+const fieldWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-end",
+  minWidth: 0,
+};
+
 const labelStyle: React.CSSProperties = {
+  minHeight: 28,
   marginBottom: 10,
-  fontWeight: "bold",
+  fontWeight: 900,
+  fontSize: 18,
   textAlign: "center",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: 16,
+  height: boxHeight,
+  padding: "0 16px",
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,.15)",
   background: "#020617",
   color: "white",
   colorScheme: "dark",
   accentColor: "#ffffff",
-  fontSize: 20,
+  fontSize: 24,
+  fontWeight: 900,
   boxSizing: "border-box",
   textAlign: "center",
 };
 
 const dmsBoxStyle: React.CSSProperties = {
+  width: "100%",
+  height: boxHeight,
   background: "#020617",
   borderRadius: 14,
-  padding: 16,
-  lineHeight: 1.8,
+  border: "1px solid rgba(255,255,255,.15)",
+  boxSizing: "border-box",
+  padding: "8px 12px",
+  lineHeight: 1.7,
   textAlign: "center",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 17,
+  fontWeight: 900,
 };
 
 const analysisCardStyle: React.CSSProperties = {
@@ -433,10 +468,18 @@ const analysisCardStyle: React.CSSProperties = {
   marginBottom: 20,
 };
 
+const analysisTitleStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontWeight: 900,
+  fontSize: 26,
+};
+
 const analysisTextStyle: React.CSSProperties = {
   textAlign: "center",
   lineHeight: 1.9,
   marginBottom: 16,
+  fontWeight: 800,
+  fontSize: 18,
 };
 
 const dateInputWrapStyle: React.CSSProperties = {
@@ -461,7 +504,7 @@ const btn: React.CSSProperties = {
   background: "linear-gradient(135deg,#2563eb,#7c3aed)",
   color: "white",
   fontSize: 24,
-  fontWeight: "bold",
+  fontWeight: 900,
 };
 
 const btn2: React.CSSProperties = {
@@ -473,7 +516,7 @@ const btn2: React.CSSProperties = {
   background: "rgba(59,130,246,.28)",
   color: "white",
   fontSize: 22,
-  fontWeight: "bold",
+  fontWeight: 900,
 };
 
 const sectionStyle = (color: string): React.CSSProperties => ({
@@ -487,6 +530,8 @@ const sectionStyle = (color: string): React.CSSProperties => ({
 const sectionTitleStyle: React.CSSProperties = {
   textAlign: "center",
   marginBottom: 20,
+  fontWeight: 900,
+  fontSize: 28,
 };
 
 const resultGridStyle: React.CSSProperties = {
@@ -500,14 +545,28 @@ const resultCardStyle: React.CSSProperties = {
   borderRadius: 14,
   padding: 14,
   textAlign: "center",
+  minHeight: 118,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const resultLabelStyle: React.CSSProperties = {
-  opacity: 0.8,
+  opacity: 0.85,
+  marginBottom: 8,
+  fontWeight: 900,
+  fontSize: 16,
+};
+
+const resultIconStyle: React.CSSProperties = {
+  fontSize: 28,
+  lineHeight: 1.2,
   marginBottom: 8,
 };
 
 const resultValueStyle: React.CSSProperties = {
-  fontWeight: "bold",
+  fontWeight: 900,
   fontSize: 22,
+  lineHeight: 1.4,
 };
