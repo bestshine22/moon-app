@@ -263,6 +263,13 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
       icon: "⚪",
       label: "غير محدد",
       result: "غير محدد",
+      odeh: {
+        moonAltitude: "-",
+        sunAltitude: "-",
+        relativeAltitude: "-",
+        crescentWidthArcMin: "-",
+        q: "-",
+      },
     };
   }
 
@@ -274,10 +281,20 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
 
   const w = crescentWidthArcMin;
 
+  // معادلة معيار عودة:
+  // q = ARCV - (7.1651 - 6.3226W + 0.7319W² - 0.1018W³)
   const threshold =
-    11.8371 - 6.3226 * w + 0.7319 * w * w - 0.1018 * w * w * w;
+    7.1651 - 6.3226 * w + 0.7319 * w * w - 0.1018 * w * w * w;
 
   const q = relativeAltitude - threshold;
+
+  const odeh = {
+    moonAltitude: fmt(moonAlt),
+    sunAltitude: fmt(sunAlt),
+    relativeAltitude: fmt(relativeAltitude),
+    crescentWidthArcMin: fmt(w),
+    q: fmt(q),
+  };
 
   if (moonAlt <= 0 || lagMinutes <= 0 || ageHours < 8) {
     return {
@@ -285,50 +302,56 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
       icon: "🔴",
       label: "مستحيل",
       result: "مستحيل",
+      odeh,
     };
   }
 
-  if (q >= 0.216) {
+  if (q >= 5.65) {
     return {
       level: "easy",
       icon: "🟢",
       label: "قابل للرؤية بسهولة",
       result: "قابل للرؤية بسهولة",
+      odeh,
     };
   }
 
-  if (q >= -0.014) {
+  if (q >= 2.0) {
     return {
       level: "naked_eye",
       icon: "🟢",
       label: "قابل للرؤية بالعين المجردة",
       result: "قابل للرؤية بالعين المجردة",
+      odeh,
     };
   }
 
-  if (q >= -0.160) {
-    return {
-      level: "optical_then_eye",
-      icon: "🟡",
-      label: "قابل للرؤية بالتلسكوب",
-      result: "قابل للرؤية بالتلسكوب",
-    };
-  }
-
-  if (q >= -0.232) {
+  if (q >= -0.96) {
     return {
       level: "optical",
       icon: "🟠",
       label: "قابل للرؤية بالتلسكوب",
       result: "قابل للرؤية بالتلسكوب",
+      odeh,
+    };
+  }
+
+  if (q >= -1.65) {
+    return {
+      level: "not_possible",
+      icon: "🔴",
+      label: "غير ممكن",
+      result: "غير ممكن",
+      odeh,
     };
   }
 
   return {
-    level: "not_possible",
+    level: "impossible",
     icon: "🔴",
-    label: "غير ممكن",
-    result: "غير ممكن",
+    label: "مستحيل",
+    result: "مستحيل",
+    odeh,
   };
 }
 
@@ -538,14 +561,10 @@ async function buildHilalFromNewMoon(
       bestTimeIso: bestTime.toISOString(),
       lag: lag.toFixed(1),
 
-      // بيانات وقت الغروب
       sunsetData: sunsetDataLocal,
-
-      // بيانات أفضل وقت
       bestTimeData: bestTimeDataLocal,
       odehBestTimeData: bestTimeDataLocal,
 
-      // NASA للتحقق الخارجي فقط، لا تدخل في حكم عودة ولا في أرقام القسم البرتقالي
       jplSunsetData,
       jplBestTimeData,
 
@@ -554,9 +573,9 @@ async function buildHilalFromNewMoon(
       validation: {
         ok: true,
         notes: [
-          "القسم البرتقالي مفصول إلى بيانات وقت الغروب وبيانات أفضل وقت.",
+          "القسم مفصول إلى بيانات وقت الغروب وبيانات أفضل وقت.",
           "نتيجة معيار عودة محسوبة عند أفضل وقت = غروب الشمس + 4/9 من مكث القمر.",
-          "الأرقام المعروضة في قسم الهلال من Astronomy Engine حتى تكون متسقة مع حكم معيار عودة.",
+          "معادلة q تستخدم ثابت عودة 7.1651.",
           "NASA JPL Horizons محفوظ كتحقق خارجي فقط عند توفر الاتصال.",
         ],
       },

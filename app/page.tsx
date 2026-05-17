@@ -332,6 +332,22 @@ export default function Page() {
                 hilalBest.jplVerified,
               ],
               [
+                "ارتفاع الشمس عند أفضل وقت",
+                `${visibility?.odeh?.sunAltitude || "-"}°`,
+                "☀️",
+              ],
+              [
+                "الارتفاع النسبي حسب عودة",
+                `${visibility?.odeh?.relativeAltitude || "-"}°`,
+                "↕️",
+              ],
+              [
+                "عرض الهلال حسب عودة",
+                `${visibility?.odeh?.crescentWidthArcMin || "-"}′`,
+                "☾",
+              ],
+              ["q حسب معيار عودة", visibility?.odeh?.q || "-", "q"],
+              [
                 "اتجاه القمر عند أفضل وقت",
                 `${hilalBest.azimuth}° / ${directionName(hilalBest.azimuth)}`,
                 "🧭",
@@ -459,6 +475,26 @@ export default function Page() {
                   `${forecastBest.altitude}°`,
                   "△",
                   forecastBest.jplVerified,
+                ],
+                [
+                  "ارتفاع الشمس عند أفضل وقت",
+                  `${forecastVisibility?.odeh?.sunAltitude || "-"}°`,
+                  "☀️",
+                ],
+                [
+                  "الارتفاع النسبي حسب عودة",
+                  `${forecastVisibility?.odeh?.relativeAltitude || "-"}°`,
+                  "↕️",
+                ],
+                [
+                  "عرض الهلال حسب عودة",
+                  `${forecastVisibility?.odeh?.crescentWidthArcMin || "-"}′`,
+                  "☾",
+                ],
+                [
+                  "q حسب معيار عودة",
+                  forecastVisibility?.odeh?.q || "-",
+                  "q",
                 ],
                 [
                   "اتجاه القمر عند أفضل وقت",
