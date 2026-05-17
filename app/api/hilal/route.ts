@@ -5,6 +5,21 @@ const MAX_MOON_AGE_HOURS = 29.6 * 24;
 const MAX_REASONABLE_LAG_MINUTES = 18 * 60;
 const KEEP_CURRENT_HILAL_DAYS = 7;
 
+const HIJRI_MONTHS = [
+  "محرم",
+  "صفر",
+  "ربيع الأول",
+  "ربيع الآخر",
+  "جمادى الأولى",
+  "جمادى الآخرة",
+  "رجب",
+  "شعبان",
+  "رمضان",
+  "شوال",
+  "ذو القعدة",
+  "ذو الحجة",
+];
+
 function fmt(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "-";
 }
@@ -136,10 +151,8 @@ async function getJplMoonData(
   try {
     const cleanDate = floorToMinute(date);
     const stopDate = addMinutes(cleanDate, 1);
-
     const start = formatUtcForJpl(cleanDate);
     const stop = formatUtcForJpl(stopDate);
-
     const heightKm = Number.isFinite(heightMeters) ? heightMeters / 1000 : 0;
 
     const url =
@@ -184,6 +197,37 @@ function hijriMonthTitle(date: Date) {
   } catch {
     return "معطيات الهلال";
   }
+}
+
+function hijriForecastTitle(month: number, year: number) {
+  return `توقعات هلال شهر ${HIJRI_MONTHS[month - 1]} ${year}`;
+}
+
+function islamicToJulianDay(year: number, month: number, day: number) {
+  return (
+    day +
+    Math.ceil(29.5 * (month - 1)) +
+    (year - 1) * 354 +
+    Math.floor((3 + 11 * year) / 30) +
+    1948439.5 -
+    1
+  );
+}
+
+function julianDayToDate(jd: number) {
+  const unixMs = (jd - 2440587.5) * 86400_000;
+  return new Date(unixMs);
+}
+
+function approximateHijriStartDate(year: number, month: number) {
+  const jd = islamicToJulianDay(year, month, 1);
+  return julianDayToDate(jd);
+}
+
+function forecastNewMoonForHijriMonth(year: number, month: number) {
+  const approxStart = approximateHijriStartDate(year, month);
+  const searchPoint = new Date(approxStart.getTime() + 2 * 86400_000);
+  return searchNewMoonBefore(searchPoint);
 }
 
 function visibilityResult(data: any, lagMinutes: number) {
@@ -390,16 +434,15 @@ function findSunset(observer: Astronomy.Observer, date: Date) {
   return event ? floorToMinute(event.date) : null;
 }
 
-async function findHilalData(
+async function buildHilalFromNewMoon(
   observer: Astronomy.Observer,
   lat: number,
   lng: number,
-  heightMeters: number
+  heightMeters: number,
+  newMoon: Date,
+  monthTitle: string,
+  kind: string
 ) {
-  const now = floorToMinute(new Date());
-  const chosen = chooseHilalNewMoon(now);
-  const newMoon = chosen.newMoon;
-
   for (let day = 0; day <= 5; day++) {
     const candidateDate = new Date(newMoon);
     candidateDate.setDate(candidateDate.getDate() + day);
@@ -434,8 +477,8 @@ async function findHilalData(
     const visibility = visibilityResult(sunsetDataAccurate, lag);
 
     return {
-      kind: chosen.mode,
-      monthTitle: hijriMonthTitle(sunset),
+      kind,
+      monthTitle,
       newMoonIso: newMoon.toISOString(),
       sunsetIso: sunset.toISOString(),
       moonsetIso: moonset.toISOString(),
@@ -447,7 +490,6 @@ async function findHilalData(
         ok: true,
         notes: [
           "معطيات الهلال معروضة عند غروب الشمس بالضبط.",
-          "لا يتم الانتقال لهلال الشهر التالي إلا بعد مرور 7 أيام من ولادة الهلال الحالي.",
           "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
         ],
       },
@@ -455,6 +497,27 @@ async function findHilalData(
   }
 
   return null;
+}
+
+async function findHilalData(
+  observer: Astronomy.Observer,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
+  const now = floorToMinute(new Date());
+  const chosen = chooseHilalNewMoon(now);
+  const newMoon = chosen.newMoon;
+
+  return buildHilalFromNewMoon(
+    observer,
+    lat,
+    lng,
+    heightMeters,
+    newMoon,
+    hijriMonthTitle(newMoon),
+    chosen.mode
+  );
 }
 
 async function customObservation(
@@ -508,6 +571,9 @@ export async function GET(request: Request) {
     const height = Number(searchParams.get("height") ?? "0");
     const observeTime = searchParams.get("observeTime");
 
+    const forecastMonth = Number(searchParams.get("forecastMonth"));
+    const forecastYear = Number(searchParams.get("forecastYear"));
+
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return NextResponse.json(
         { error: "الإحداثيات غير صحيحة" },
@@ -547,11 +613,38 @@ export async function GET(request: Request) {
       custom = await customObservation(observer, lat, lng, heightMeters, observeTime);
     }
 
+    let forecast = null;
+
+    if (
+      Number.isFinite(forecastMonth) &&
+      Number.isFinite(forecastYear) &&
+      forecastMonth >= 1 &&
+      forecastMonth <= 12 &&
+      forecastYear >= 1300 &&
+      forecastYear <= 1700
+    ) {
+      const forecastNewMoon = forecastNewMoonForHijriMonth(
+        forecastYear,
+        forecastMonth
+      );
+
+      forecast = await buildHilalFromNewMoon(
+        observer,
+        lat,
+        lng,
+        heightMeters,
+        forecastNewMoon,
+        hijriForecastTitle(forecastMonth, forecastYear),
+        "forecast_hilal"
+      );
+    }
+
     return NextResponse.json({
       observer: { lat, lng, height: heightMeters },
       nowData,
       hilal,
       custom,
+      forecast,
       engineValidation: {
         ok: true,
         primaryExternalReference: "NASA JPL Horizons",

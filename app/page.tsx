@@ -2,6 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+const HIJRI_MONTHS = [
+  "محرم",
+  "صفر",
+  "ربيع الأول",
+  "ربيع الآخر",
+  "جمادى الأولى",
+  "جمادى الآخرة",
+  "رجب",
+  "شعبان",
+  "رمضان",
+  "شوال",
+  "ذو القعدة",
+  "ذو الحجة",
+];
+
 function localToIso(value: string) {
   if (!value) return "";
   return new Date(value).toISOString();
@@ -87,10 +102,14 @@ function DmsText({ value }: { value: string }) {
 }
 
 export default function Page() {
+  const currentYear = 1447;
+
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [height, setHeight] = useState("0");
   const [observeTime, setObserveTime] = useState("");
+  const [forecastMonth, setForecastMonth] = useState("12");
+  const [forecastYear, setForecastYear] = useState(String(currentYear));
   const [gpsStatus, setGpsStatus] = useState("لم يتم تحديد الموقع بعد");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -136,7 +155,7 @@ export default function Page() {
     updateLocation();
   }, []);
 
-  async function calculate() {
+  async function calculate(options?: { forecast?: boolean }) {
     if (!lat || !lng) {
       alert("حدد موقعك أولًا");
       return;
@@ -151,6 +170,10 @@ export default function Page() {
         `&height=${encodeURIComponent(height || "0")}` +
         (observeTime
           ? `&observeTime=${encodeURIComponent(localToIso(observeTime))}`
+          : "") +
+        (options?.forecast
+          ? `&forecastMonth=${encodeURIComponent(forecastMonth)}` +
+            `&forecastYear=${encodeURIComponent(forecastYear)}`
           : "");
 
       const res = await fetch(url);
@@ -173,8 +196,11 @@ export default function Page() {
   const nowData = result?.nowData;
   const hilalSunset = result?.hilal?.sunsetData;
   const custom = result?.custom;
+  const forecast = result?.forecast;
+  const forecastSunset = forecast?.sunsetData;
   const hilalTitle = result?.hilal?.monthTitle || "معطيات الهلال";
   const visibility = result?.hilal?.visibility;
+  const forecastVisibility = forecast?.visibility;
 
   return (
     <main style={pageStyle}>
@@ -215,7 +241,7 @@ export default function Page() {
             📍 تحديث موقعي الآن
           </button>
 
-          <button onClick={calculate} style={btn}>
+          <button onClick={() => calculate()} style={btn}>
             {loading ? "جاري الحساب..." : "🔭 احسب"}
           </button>
         </section>
@@ -235,7 +261,7 @@ export default function Page() {
                 "🧭",
                 nowData.jplVerified,
               ],
-              ["عمر القمر الآن", nowData.ageText, "☾"],
+              ["عمر القمر الآن (اقتران مركزي)", nowData.ageText, "☾"],
               ["الاستطالة الآن", `${nowData.elongation}°`, "☼", nowData.jplVerified],
               ["الإضاءة الآن", `${nowData.illumination}%`, "🌙", nowData.jplVerified],
             ]}
@@ -260,12 +286,103 @@ export default function Page() {
                 "🧭",
                 hilalSunset.jplVerified,
               ],
-              ["عمر الهلال", hilalSunset.ageText, "☾"],
+              ["عمر الهلال (اقتران مركزي)", hilalSunset.ageText, "☾"],
               ["الاستطالة", `${hilalSunset.elongation}°`, "☼", hilalSunset.jplVerified],
               ["الإضاءة", `${hilalSunset.illumination}%`, "🌙", hilalSunset.jplVerified],
             ]}
           />
         )}
+
+        <section style={analysisCardStyle}>
+          <h2 style={analysisTitleStyle}>🔮 توقعات الأهلة القادمة</h2>
+
+          <div style={forecastGridStyle}>
+            <div style={fieldWrapStyle}>
+              <div style={labelStyle}>الشهر الهجري</div>
+              <select
+                value={forecastMonth}
+                onChange={(e) => setForecastMonth(e.target.value)}
+                style={inputStyle}
+              >
+                {HIJRI_MONTHS.map((m, i) => (
+                  <option key={m} value={String(i + 1)}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={fieldWrapStyle}>
+              <div style={labelStyle}>السنة الهجرية</div>
+              <select
+                value={forecastYear}
+                onChange={(e) => setForecastYear(e.target.value)}
+                style={inputStyle}
+              >
+                {Array.from({ length: 80 }).map((_, i) => {
+                  const y = 1440 + i;
+                  return (
+                    <option key={y} value={String(y)}>
+                      {y}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <button onClick={() => calculate({ forecast: true })} style={btn2}>
+            احسب توقعات الهلال
+          </button>
+
+          {forecastSunset && (
+            <Section
+              title={`🔮 ${forecast.monthTitle} عند غروب الشمس`}
+              color="#60a5fa"
+              data={[
+                ["التاريخ", fmtDate(forecastSunset.iso), "📅"],
+                ["اليوم", fmtDay(forecastSunset.iso), "🗓️"],
+                [
+                  "حالة الرؤية",
+                  `${forecastVisibility?.icon || "⚪"} ${
+                    forecastVisibility?.label || "-"
+                  }`,
+                  "👁️",
+                ],
+                ["غروب الشمس", fmtTime(forecast.sunsetIso), "🌇"],
+                ["غروب القمر", fmtTime(forecast.moonsetIso), "🌙"],
+                ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
+                [
+                  "ارتفاع الهلال",
+                  `${forecastSunset.altitude}°`,
+                  "△",
+                  forecastSunset.jplVerified,
+                ],
+                [
+                  "اتجاه الهلال",
+                  `${forecastSunset.azimuth}° - ${directionName(
+                    forecastSunset.azimuth
+                  )}`,
+                  "🧭",
+                  forecastSunset.jplVerified,
+                ],
+                ["عمر الهلال (اقتران مركزي)", forecastSunset.ageText, "☾"],
+                [
+                  "الاستطالة",
+                  `${forecastSunset.elongation}°`,
+                  "☼",
+                  forecastSunset.jplVerified,
+                ],
+                [
+                  "الإضاءة",
+                  `${forecastSunset.illumination}%`,
+                  "🌙",
+                  forecastSunset.jplVerified,
+                ],
+              ]}
+            />
+          )}
+        </section>
 
         <section style={analysisCardStyle}>
           <h2 style={analysisTitleStyle}>🛰️ تحليل وقت الرصد الحقيقي</h2>
@@ -289,7 +406,7 @@ export default function Page() {
             />
           </div>
 
-          <button onClick={calculate} style={btn2}>
+          <button onClick={() => calculate()} style={btn2}>
             احسب معطيات وقت الرصد
           </button>
 
@@ -302,7 +419,7 @@ export default function Page() {
                 ["ارتفاع الهلال", `${custom.altitude}°`, "△", custom.jplVerified],
                 ["الاستطالة", `${custom.elongation}°`, "☼", custom.jplVerified],
                 ["الإضاءة", `${custom.illumination}%`, "🌙", custom.jplVerified],
-                ["عمر الهلال", custom.ageText, "☾"],
+                ["عمر الهلال (اقتران مركزي)", custom.ageText, "☾"],
                 [
                   "اتجاه الهلال",
                   `${custom.azimuth}° - ${directionName(custom.azimuth)}`,
@@ -419,6 +536,14 @@ const inputGridStyle: React.CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
   gap: 20,
   alignItems: "end",
+};
+
+const forecastGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 20,
+  alignItems: "end",
+  marginBottom: 8,
 };
 
 const fieldWrapStyle: React.CSSProperties = {
