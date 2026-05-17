@@ -102,14 +102,12 @@ function DmsText({ value }: { value: string }) {
 }
 
 export default function Page() {
-  const currentYear = 1447;
-
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [height, setHeight] = useState("0");
   const [observeTime, setObserveTime] = useState("");
   const [forecastMonth, setForecastMonth] = useState("12");
-  const [forecastYear, setForecastYear] = useState(String(currentYear));
+  const [forecastYear, setForecastYear] = useState("1447");
   const [gpsStatus, setGpsStatus] = useState("لم يتم تحديد الموقع بعد");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -181,8 +179,8 @@ export default function Page() {
 
       setResult(data);
 
-      if (data?.hilal?.sunsetData?.iso && !observeTime) {
-        setObserveTime(toInputValue(data.hilal.sunsetData.iso));
+      if (data?.hilal?.bestTimeIso && !observeTime) {
+        setObserveTime(toInputValue(data.hilal.bestTimeIso));
       }
 
       if (data.error) alert(data.error);
@@ -194,11 +192,11 @@ export default function Page() {
   }
 
   const nowData = result?.nowData;
-  const hilalSunset = result?.hilal?.sunsetData;
+  const hilalBest = result?.hilal?.bestTimeData;
   const custom = result?.custom;
   const forecast = result?.forecast;
-  const forecastSunset = forecast?.sunsetData;
-  const hilalTitle = result?.hilal?.monthTitle || "معطيات الهلال";
+  const forecastBest = forecast?.bestTimeData;
+  const hilalTitle = result?.hilal?.monthTitle || "الهلال";
   const visibility = result?.hilal?.visibility;
   const forecastVisibility = forecast?.visibility;
 
@@ -254,7 +252,12 @@ export default function Page() {
               ["التاريخ", fmtDate(nowData.iso), "📅"],
               ["اليوم", fmtDay(nowData.iso), "🗓️"],
               ["الساعة", fmtTime(nowData.iso), "🕒"],
-              ["ارتفاع القمر الآن", `${nowData.altitude}°`, "△", nowData.jplVerified],
+              [
+                "ارتفاع القمر الآن",
+                `${nowData.altitude}°`,
+                "△",
+                nowData.jplVerified,
+              ],
               [
                 "اتجاه القمر الآن",
                 `${nowData.azimuth}° - ${directionName(nowData.azimuth)}`,
@@ -262,33 +265,74 @@ export default function Page() {
                 nowData.jplVerified,
               ],
               ["عمر القمر الآن (اقتران مركزي)", nowData.ageText, "☾"],
-              ["الاستطالة الآن", `${nowData.elongation}°`, "☼", nowData.jplVerified],
-              ["الإضاءة الآن", `${nowData.illumination}%`, "🌙", nowData.jplVerified],
+              [
+                "الاستطالة الآن",
+                `${nowData.elongation}°`,
+                "☼",
+                nowData.jplVerified,
+              ],
+              [
+                "الإضاءة الآن",
+                `${nowData.illumination}%`,
+                "🌙",
+                nowData.jplVerified,
+              ],
             ]}
           />
         )}
 
-        {hilalSunset && (
+        {hilalBest && (
           <Section
-            title={`👁️ ${hilalTitle} عند غروب الشمس`}
+            title={`👁️ أفضل وقت لرؤية ${hilalTitle} حسب معيار عودة`}
             color="#fb923c"
             data={[
-              ["التاريخ", fmtDate(hilalSunset.iso), "📅"],
-              ["اليوم", fmtDay(hilalSunset.iso), "🗓️"],
-              ["حالة الرؤية", `${visibility?.icon || "⚪"} ${visibility?.label || "-"}`, "👁️"],
+              ["التاريخ", fmtDate(hilalBest.iso), "📅"],
+              ["اليوم", fmtDay(hilalBest.iso), "🗓️"],
+              ["أفضل وقت للرؤية", fmtTime(result.hilal.bestTimeIso), "🕒"],
+              [
+                "حالة الرؤية",
+                `${visibility?.icon || "⚪"} ${visibility?.label || "-"}`,
+                "👁️",
+              ],
               ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
               ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
               ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
-              ["ارتفاع الهلال", `${hilalSunset.altitude}°`, "△", hilalSunset.jplVerified],
+              [
+                "ارتفاع الهلال",
+                `${hilalBest.altitude}°`,
+                "△",
+                hilalBest.jplVerified,
+              ],
               [
                 "اتجاه الهلال",
-                `${hilalSunset.azimuth}° - ${directionName(hilalSunset.azimuth)}`,
+                `${hilalBest.azimuth}° - ${directionName(hilalBest.azimuth)}`,
                 "🧭",
-                hilalSunset.jplVerified,
+                hilalBest.jplVerified,
               ],
-              ["عمر الهلال (اقتران مركزي)", hilalSunset.ageText, "☾"],
-              ["الاستطالة", `${hilalSunset.elongation}°`, "☼", hilalSunset.jplVerified],
-              ["الإضاءة", `${hilalSunset.illumination}%`, "🌙", hilalSunset.jplVerified],
+              ["عمر الهلال (اقتران مركزي)", hilalBest.ageText, "☾"],
+              [
+                "الاستطالة",
+                `${hilalBest.elongation}°`,
+                "☼",
+                hilalBest.jplVerified,
+              ],
+              [
+                "الإضاءة",
+                `${hilalBest.illumination}%`,
+                "🌙",
+                hilalBest.jplVerified,
+              ],
+              ["q معيار عودة", visibility?.q || "-", "q"],
+              [
+                "ارتفاع نسبي",
+                `${visibility?.relativeAltitude || "-"}°`,
+                "△",
+              ],
+              [
+                "عرض الهلال",
+                `${visibility?.crescentWidthArcMin || "-"}′`,
+                "☾",
+              ],
             ]}
           />
         )}
@@ -335,13 +379,14 @@ export default function Page() {
             احسب توقعات الهلال
           </button>
 
-          {forecastSunset && (
+          {forecastBest && (
             <Section
-              title={`🔮 ${forecast.monthTitle} عند غروب الشمس`}
+              title={`🔮 أفضل وقت لرؤية ${forecast.monthTitle} حسب معيار عودة`}
               color="#60a5fa"
               data={[
-                ["التاريخ", fmtDate(forecastSunset.iso), "📅"],
-                ["اليوم", fmtDay(forecastSunset.iso), "🗓️"],
+                ["التاريخ", fmtDate(forecastBest.iso), "📅"],
+                ["اليوم", fmtDay(forecastBest.iso), "🗓️"],
+                ["أفضل وقت للرؤية", fmtTime(forecast.bestTimeIso), "🕒"],
                 [
                   "حالة الرؤية",
                   `${forecastVisibility?.icon || "⚪"} ${
@@ -354,30 +399,41 @@ export default function Page() {
                 ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
                 [
                   "ارتفاع الهلال",
-                  `${forecastSunset.altitude}°`,
+                  `${forecastBest.altitude}°`,
                   "△",
-                  forecastSunset.jplVerified,
+                  forecastBest.jplVerified,
                 ],
                 [
                   "اتجاه الهلال",
-                  `${forecastSunset.azimuth}° - ${directionName(
-                    forecastSunset.azimuth
+                  `${forecastBest.azimuth}° - ${directionName(
+                    forecastBest.azimuth
                   )}`,
                   "🧭",
-                  forecastSunset.jplVerified,
+                  forecastBest.jplVerified,
                 ],
-                ["عمر الهلال (اقتران مركزي)", forecastSunset.ageText, "☾"],
+                ["عمر الهلال (اقتران مركزي)", forecastBest.ageText, "☾"],
                 [
                   "الاستطالة",
-                  `${forecastSunset.elongation}°`,
+                  `${forecastBest.elongation}°`,
                   "☼",
-                  forecastSunset.jplVerified,
+                  forecastBest.jplVerified,
                 ],
                 [
                   "الإضاءة",
-                  `${forecastSunset.illumination}%`,
+                  `${forecastBest.illumination}%`,
                   "🌙",
-                  forecastSunset.jplVerified,
+                  forecastBest.jplVerified,
+                ],
+                ["q معيار عودة", forecastVisibility?.q || "-", "q"],
+                [
+                  "ارتفاع نسبي",
+                  `${forecastVisibility?.relativeAltitude || "-"}°`,
+                  "△",
+                ],
+                [
+                  "عرض الهلال",
+                  `${forecastVisibility?.crescentWidthArcMin || "-"}′`,
+                  "☾",
                 ],
               ]}
             />
@@ -416,9 +472,24 @@ export default function Page() {
               color="#60a5fa"
               data={[
                 ["وقت الرصد", fmtTime(custom.iso), "🕒"],
-                ["ارتفاع الهلال", `${custom.altitude}°`, "△", custom.jplVerified],
-                ["الاستطالة", `${custom.elongation}°`, "☼", custom.jplVerified],
-                ["الإضاءة", `${custom.illumination}%`, "🌙", custom.jplVerified],
+                [
+                  "ارتفاع الهلال",
+                  `${custom.altitude}°`,
+                  "△",
+                  custom.jplVerified,
+                ],
+                [
+                  "الاستطالة",
+                  `${custom.elongation}°`,
+                  "☼",
+                  custom.jplVerified,
+                ],
+                [
+                  "الإضاءة",
+                  `${custom.illumination}%`,
+                  "🌙",
+                  custom.jplVerified,
+                ],
                 ["عمر الهلال (اقتران مركزي)", custom.ageText, "☾"],
                 [
                   "اتجاه الهلال",
@@ -426,7 +497,11 @@ export default function Page() {
                   "🧭",
                   custom.jplVerified,
                 ],
-                ["مكث القمر المتبقي", `${custom.remainingMoonset} دقيقة`, "⌛"],
+                [
+                  "مكث القمر المتبقي",
+                  `${custom.remainingMoonset} دقيقة`,
+                  "⌛",
+                ],
               ]}
             />
           )}
@@ -434,8 +509,8 @@ export default function Page() {
 
         <div style={noteStyle}>
           🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
-          Horizons عند توفر الاتصال. وحالة الرؤية تقديرية وتعتمد على صفاء الجو
-          والأفق وخبرة الراصد.
+          Horizons عند توفر الاتصال. أفضل وقت الرؤية محسوب وفق قاعدة عودة:
+          غروب الشمس + 4/9 من مكث القمر.
         </div>
       </div>
     </main>
