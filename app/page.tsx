@@ -44,6 +44,11 @@ function fmtTime(iso?: string) {
   });
 }
 
+function fmtDateTimeLine(iso?: string) {
+  if (!iso) return "-";
+  return `${fmtDay(iso)} / ${fmtDate(iso)} / ${fmtTime(iso)}`;
+}
+
 function directionName(deg: string) {
   const d = Number(deg);
   if (d >= 337.5 || d < 22.5) return "شمال";
@@ -225,9 +230,7 @@ export default function Page() {
             title="🌙 حالة القمر الآن حسب موقعك"
             color="#22c55e"
             data={[
-              ["التاريخ", fmtDate(nowData.iso), "📅"],
-              ["اليوم", fmtDay(nowData.iso), "🗓️"],
-              ["الساعة", fmtTime(nowData.iso), "🕒"],
+              ["التاريخ والوقت", fmtDateTimeLine(nowData.iso), "🗓️"],
               [
                 "ارتفاع القمر الآن",
                 `${nowData.altitude}°`,
@@ -262,15 +265,18 @@ export default function Page() {
             title={`👁️ أفضل وقت لرؤية ${hilalTitle} حسب معيار عودة`}
             color="#fb923c"
             data={[
-              ["التاريخ", fmtDate(hilalBest.iso), "📅"],
-              ["اليوم", fmtDay(hilalBest.iso), "🗓️"],
-              ["أفضل وقت للرؤية", fmtTime(result.hilal.bestTimeIso), "🕒"],
+              [
+                "التاريخ والوقت",
+                fmtDateTimeLine(result.hilal.bestTimeIso || hilalBest.iso),
+                "🗓️",
+              ],
               [
                 "نتيجة معيار عودة",
-                `${visibility?.icon || "⚪"} ${visibility?.label || "-"}`,
+                `${visibility?.icon || "⚪"} ${
+                  visibility?.result || visibility?.label || "-"
+                }`,
                 "👁️",
               ],
-              ["تفصيل الرؤية", visibility?.note || "-", "ℹ️"],
               ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
               ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
               ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
@@ -299,13 +305,6 @@ export default function Page() {
                 "🌙",
                 hilalBest.jplVerified,
               ],
-              ["q معيار عودة", visibility?.q || "-", "q"],
-              [
-                "ارتفاع نسبي",
-                `${visibility?.relativeAltitude || "-"}°`,
-                "△",
-              ],
-              ["عرض الهلال", `${visibility?.crescentWidthArcMin || "-"}′`, "☾"],
             ]}
           />
         )}
@@ -357,17 +356,18 @@ export default function Page() {
               title={`🔮 أفضل وقت لرؤية ${forecast.monthTitle} حسب معيار عودة`}
               color="#60a5fa"
               data={[
-                ["التاريخ", fmtDate(forecastBest.iso), "📅"],
-                ["اليوم", fmtDay(forecastBest.iso), "🗓️"],
-                ["أفضل وقت للرؤية", fmtTime(forecast.bestTimeIso), "🕒"],
+                [
+                  "التاريخ والوقت",
+                  fmtDateTimeLine(forecast.bestTimeIso || forecastBest.iso),
+                  "🗓️",
+                ],
                 [
                   "نتيجة معيار عودة",
                   `${forecastVisibility?.icon || "⚪"} ${
-                    forecastVisibility?.label || "-"
+                    forecastVisibility?.result || forecastVisibility?.label || "-"
                   }`,
                   "👁️",
                 ],
-                ["تفصيل الرؤية", forecastVisibility?.note || "-", "ℹ️"],
                 ["غروب الشمس", fmtTime(forecast.sunsetIso), "🌇"],
                 ["غروب القمر", fmtTime(forecast.moonsetIso), "🌙"],
                 ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
@@ -398,17 +398,6 @@ export default function Page() {
                   "🌙",
                   forecastBest.jplVerified,
                 ],
-                ["q معيار عودة", forecastVisibility?.q || "-", "q"],
-                [
-                  "ارتفاع نسبي",
-                  `${forecastVisibility?.relativeAltitude || "-"}°`,
-                  "△",
-                ],
-                [
-                  "عرض الهلال",
-                  `${forecastVisibility?.crescentWidthArcMin || "-"}′`,
-                  "☾",
-                ],
               ]}
             />
           )}
@@ -416,7 +405,7 @@ export default function Page() {
 
         <div style={noteStyle}>
           🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
-          Horizons عند توفر الاتصال. نتيجة الرؤية مفصلة حسب معيار عودة.
+          Horizons عند توفر الاتصال. نتيجة الرؤية مختصرة حسب معيار عودة.
         </div>
       </div>
     </main>

@@ -246,11 +246,8 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "unknown",
       icon: "⚪",
-      label: "غير محدد حسب معيار عودة",
-      note: "المعطيات غير كافية لتطبيق معيار عودة.",
-      q: "-",
-      crescentWidthArcMin: "-",
-      relativeAltitude: "-",
+      label: "غير محدد",
+      result: "غير محدد",
     };
   }
 
@@ -269,11 +266,8 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "impossible",
       icon: "🔴",
-      label: "غير قابل للرؤية حسب معيار عودة",
-      note: "الهلال دون الشروط الأساسية للرؤية.",
-      q: fmt(q),
-      crescentWidthArcMin: fmt(w),
-      relativeAltitude: fmt(relativeAltitude),
+      label: "مستحيل",
+      result: "مستحيل",
     };
   }
 
@@ -281,11 +275,8 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "easy",
       icon: "🟢",
-      label: "مرئي بسهولة بالعين المجردة حسب معيار عودة",
-      note: "المعطيات ممتازة للرؤية إذا كان الجو صافيًا.",
-      q: fmt(q),
-      crescentWidthArcMin: fmt(w),
-      relativeAltitude: fmt(relativeAltitude),
+      label: "قابل للرؤية بسهولة",
+      result: "قابل للرؤية بسهولة",
     };
   }
 
@@ -293,11 +284,8 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "naked_eye",
       icon: "🟢",
-      label: "مرئي بالعين المجردة حسب معيار عودة",
-      note: "الرؤية ممكنة مع صفاء الجو والأفق.",
-      q: fmt(q),
-      crescentWidthArcMin: fmt(w),
-      relativeAltitude: fmt(relativeAltitude),
+      label: "قابل للرؤية بالعين المجردة",
+      result: "قابل للرؤية بالعين المجردة",
     };
   }
 
@@ -305,11 +293,8 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "optical_then_eye",
       icon: "🟡",
-      label: "قد يُرى بالعين بعد تحديده بالمنظار حسب معيار عودة",
-      note: "الرؤية صعبة وتحتاج خبرة وأفقًا صافيًا.",
-      q: fmt(q),
-      crescentWidthArcMin: fmt(w),
-      relativeAltitude: fmt(relativeAltitude),
+      label: "قابل للرؤية بالتلسكوب",
+      result: "قابل للرؤية بالتلسكوب",
     };
   }
 
@@ -317,22 +302,16 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
     return {
       level: "optical",
       icon: "🟠",
-      label: "ممكن بالمنظار فقط حسب معيار عودة",
-      note: "الرؤية بالعين المجردة غير متوقعة.",
-      q: fmt(q),
-      crescentWidthArcMin: fmt(w),
-      relativeAltitude: fmt(relativeAltitude),
+      label: "قابل للرؤية بالتلسكوب",
+      result: "قابل للرؤية بالتلسكوب",
     };
   }
 
   return {
-    level: "impossible",
+    level: "not_possible",
     icon: "🔴",
-    label: "غير قابل للرؤية حسب معيار عودة",
-    note: "القيم دون حدود الرؤية المعتمدة في معيار عودة.",
-    q: fmt(q),
-    crescentWidthArcMin: fmt(w),
-    relativeAltitude: fmt(relativeAltitude),
+    label: "غير ممكن",
+    result: "غير ممكن",
   };
 }
 
@@ -509,7 +488,7 @@ async function buildHilalFromNewMoon(
         ok: true,
         notes: [
           "أفضل وقت للرؤية = غروب الشمس + 4/9 من مكث القمر.",
-          "حالة الرؤية محسوبة وفق معيار عودة.",
+          "نتيجة الرؤية مختصرة وفق معيار عودة.",
           "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
         ],
       },
@@ -519,7 +498,12 @@ async function buildHilalFromNewMoon(
   return null;
 }
 
-async function findHilalData(observer: Astronomy.Observer, lat: number, lng: number, heightMeters: number) {
+async function findHilalData(
+  observer: Astronomy.Observer,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
   const now = floorToMinute(new Date());
   const chosen = chooseHilalNewMoon(now);
 
@@ -552,15 +536,30 @@ export async function GET(request: Request) {
     const observer = new Astronomy.Observer(lat, lng, heightMeters);
     const now = floorToMinute(new Date());
 
-    const nowData: any = await moonCalc(now, observer, lat, lng, heightMeters, undefined, true);
-    if (nowData.invalid) return NextResponse.json({ error: nowData.error, nowData });
+    const nowData: any = await moonCalc(
+      now,
+      observer,
+      lat,
+      lng,
+      heightMeters,
+      undefined,
+      true
+    );
+
+    if (nowData.invalid) {
+      return NextResponse.json({ error: nowData.error, nowData });
+    }
 
     const hilal = await findHilalData(observer, lat, lng, heightMeters);
+
     if (!hilal) {
-      return NextResponse.json({ error: "لم يتم العثور على هلال مناسب خلال الأيام القادمة." });
+      return NextResponse.json({
+        error: "لم يتم العثور على هلال مناسب خلال الأيام القادمة.",
+      });
     }
 
     let forecast = null;
+
     if (
       Number.isFinite(forecastMonth) &&
       Number.isFinite(forecastYear) &&
@@ -569,7 +568,11 @@ export async function GET(request: Request) {
       forecastYear >= 1300 &&
       forecastYear <= 1700
     ) {
-      const forecastNewMoon = forecastNewMoonForHijriMonth(forecastYear, forecastMonth);
+      const forecastNewMoon = forecastNewMoonForHijriMonth(
+        forecastYear,
+        forecastMonth
+      );
+
       forecast = await buildHilalFromNewMoon(
         observer,
         lat,
@@ -589,7 +592,8 @@ export async function GET(request: Request) {
       engineValidation: {
         ok: true,
         primaryExternalReference: "NASA JPL Horizons",
-        odeh: "أفضل وقت للرؤية = Sunset + 4/9 Moon Lag، وحالة الرؤية وفق معيار عودة.",
+        odeh:
+          "أفضل وقت للرؤية = Sunset + 4/9 Moon Lag، ونتيجة الرؤية مختصرة وفق معيار عودة.",
       },
     });
   } catch (err: any) {
