@@ -174,6 +174,7 @@ export default function Page() {
   const hilalSunset = result?.hilal?.sunsetData;
   const custom = result?.custom;
   const hilalTitle = result?.hilal?.monthTitle || "معطيات الهلال";
+  const visibility = result?.hilal?.visibility;
 
   return (
     <main style={pageStyle}>
@@ -248,6 +249,7 @@ export default function Page() {
             data={[
               ["التاريخ", fmtDate(hilalSunset.iso), "📅"],
               ["اليوم", fmtDay(hilalSunset.iso), "🗓️"],
+              ["حالة الرؤية", `${visibility?.icon || "⚪"} ${visibility?.label || "-"}`, "👁️"],
               ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
               ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
               ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
@@ -315,8 +317,8 @@ export default function Page() {
 
         <div style={noteStyle}>
           🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
-          Horizons عند توفر الاتصال. ومعطيات الهلال في القسم البرتقالي تُعرض
-          عند وقت غروب الشمس بالضبط.
+          Horizons عند توفر الاتصال. وحالة الرؤية تقديرية وتعتمد على صفاء الجو
+          والأفق وخبرة الراصد.
         </div>
       </div>
     </main>
