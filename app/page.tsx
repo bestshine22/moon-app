@@ -17,22 +17,11 @@ const HIJRI_MONTHS = [
   "ذو الحجة",
 ];
 
-function localToIso(value: string) {
-  if (!value) return "";
-  return new Date(value).toISOString();
-}
-
-function toInputValue(iso?: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
 const GREGORIAN_LOCALE = "en-GB";
 
 function fmtDate(iso?: string) {
   if (!iso) return "-";
+
   return new Date(iso).toLocaleDateString(GREGORIAN_LOCALE, {
     year: "numeric",
     month: "long",
@@ -42,6 +31,7 @@ function fmtDate(iso?: string) {
 
 function fmtDay(iso?: string) {
   if (!iso) return "-";
+
   return new Date(iso).toLocaleDateString(GREGORIAN_LOCALE, {
     weekday: "long",
   });
@@ -49,6 +39,7 @@ function fmtDay(iso?: string) {
 
 function fmtTime(iso?: string) {
   if (!iso) return "-";
+
   return new Date(iso).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -58,6 +49,7 @@ function fmtTime(iso?: string) {
 
 function directionName(deg: string) {
   const d = Number(deg);
+
   if (d >= 337.5 || d < 22.5) return "شمال";
   if (d < 67.5) return "شمال شرقي";
   if (d < 112.5) return "شرق";
@@ -65,21 +57,30 @@ function directionName(deg: string) {
   if (d < 202.5) return "جنوب";
   if (d < 247.5) return "جنوب غربي";
   if (d < 292.5) return "غرب";
+
   return "شمال غربي";
 }
 
 function decimalToDMS(value: string, type: "lat" | "lng") {
   const num = Number(value);
+
   if (!Number.isFinite(num)) return "-";
 
   const absolute = Math.abs(num);
+
   const degrees = Math.floor(absolute);
   const minutesFloat = (absolute - degrees) * 60;
   const minutes = Math.floor(minutesFloat);
   const seconds = ((minutesFloat - minutes) * 60).toFixed(2);
 
   const direction =
-    type === "lat" ? (num >= 0 ? "N" : "S") : num >= 0 ? "E" : "W";
+    type === "lat"
+      ? num >= 0
+        ? "N"
+        : "S"
+      : num >= 0
+      ? "E"
+      : "W";
 
   return `${degrees}° ${minutes}' ${seconds}" ${direction}`;
 }
@@ -105,11 +106,16 @@ export default function Page() {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [height, setHeight] = useState("0");
-  const [observeTime, setObserveTime] = useState("");
+
   const [forecastMonth, setForecastMonth] = useState("12");
   const [forecastYear, setForecastYear] = useState("1447");
-  const [gpsStatus, setGpsStatus] = useState("لم يتم تحديد الموقع بعد");
+
+  const [gpsStatus, setGpsStatus] = useState(
+    "لم يتم تحديد الموقع بعد"
+  );
+
   const [loading, setLoading] = useState(false);
+
   const [result, setResult] = useState<any>(null);
 
   function updateLocation() {
@@ -123,6 +129,7 @@ export default function Page() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(pos.coords.latitude.toFixed(6));
+
         setLng(pos.coords.longitude.toFixed(6));
 
         if (
@@ -138,9 +145,13 @@ export default function Page() {
           )} متر`
         );
       },
+
       () => {
-        setGpsStatus("تعذر تحديد الموقع. تأكد من تفعيل إذن الموقع.");
+        setGpsStatus(
+          "تعذر تحديد الموقع. تأكد من تفعيل إذن الموقع."
+        );
       },
+
       {
         enableHighAccuracy: true,
         maximumAge: 0,
@@ -166,24 +177,23 @@ export default function Page() {
         `/api/hilal?lat=${encodeURIComponent(lat)}` +
         `&lng=${encodeURIComponent(lng)}` +
         `&height=${encodeURIComponent(height || "0")}` +
-        (observeTime
-          ? `&observeTime=${encodeURIComponent(localToIso(observeTime))}`
-          : "") +
         (options?.forecast
-          ? `&forecastMonth=${encodeURIComponent(forecastMonth)}` +
-            `&forecastYear=${encodeURIComponent(forecastYear)}`
+          ? `&forecastMonth=${encodeURIComponent(
+              forecastMonth
+            )}&forecastYear=${encodeURIComponent(
+              forecastYear
+            )}`
           : "");
 
       const res = await fetch(url);
+
       const data = await res.json();
 
       setResult(data);
 
-      if (data?.hilal?.bestTimeIso && !observeTime) {
-        setObserveTime(toInputValue(data.hilal.bestTimeIso));
+      if (data.error) {
+        alert(data.error);
       }
-
-      if (data.error) alert(data.error);
     } catch {
       alert("فشل الاتصال بالحسابات");
     } finally {
@@ -192,55 +202,96 @@ export default function Page() {
   }
 
   const nowData = result?.nowData;
+
   const hilalBest = result?.hilal?.bestTimeData;
-  const custom = result?.custom;
-  const forecast = result?.forecast;
-  const forecastBest = forecast?.bestTimeData;
-  const hilalTitle = result?.hilal?.monthTitle || "الهلال";
+
   const visibility = result?.hilal?.visibility;
+
+  const forecast = result?.forecast;
+
+  const forecastBest = forecast?.bestTimeData;
+
   const forecastVisibility = forecast?.visibility;
+
+  const hilalTitle =
+    result?.hilal?.monthTitle || "الهلال";
 
   return (
     <main style={pageStyle}>
       <div style={containerStyle}>
         <header style={headerStyle}>
           <div style={{ fontSize: 70 }}>🌙</div>
+
           <h1 style={titleStyle}>مرصد الهلال</h1>
 
           <p style={subtitleStyle}>
-            حسابات فلكية دقيقة للهلال حسب موقعك والوقت
+            حسابات فلكية دقيقة للهلال حسب موقعك
           </p>
 
-          <p style={nasaStatusStyle}>NASA JPL ACTIVE</p>
+          <p style={nasaStatusStyle}>
+            NASA JPL ACTIVE
+          </p>
         </header>
 
         <section style={inputCardStyle}>
-          <p style={gpsStyle}>📍 {gpsStatus}</p>
+          <p style={gpsStyle}>
+            📍 {gpsStatus}
+          </p>
 
           <div style={inputGridStyle}>
-            <Field label="خط العرض" value={lat} setValue={setLat} />
-            <Field label="خط الطول" value={lng} setValue={setLng} />
-            <Field label="الارتفاع م" value={height} setValue={setHeight} />
+            <Field
+              label="خط العرض"
+              value={lat}
+              setValue={setLat}
+            />
+
+            <Field
+              label="خط الطول"
+              value={lng}
+              setValue={setLng}
+            />
+
+            <Field
+              label="الارتفاع م"
+              value={height}
+              setValue={setHeight}
+            />
 
             <div style={fieldWrapStyle}>
-              <div style={labelStyle}>الإحداثيات DMS</div>
+              <div style={labelStyle}>
+                الإحداثيات DMS
+              </div>
+
               <div style={dmsBoxStyle}>
                 <div>
-                  <DmsText value={decimalToDMS(lat, "lat")} />
+                  <DmsText
+                    value={decimalToDMS(lat, "lat")}
+                  />
                 </div>
+
                 <div>
-                  <DmsText value={decimalToDMS(lng, "lng")} />
+                  <DmsText
+                    value={decimalToDMS(lng, "lng")}
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          <button onClick={updateLocation} style={btn2}>
+          <button
+            onClick={updateLocation}
+            style={btn2}
+          >
             📍 تحديث موقعي الآن
           </button>
 
-          <button onClick={() => calculate()} style={btn}>
-            {loading ? "جاري الحساب..." : "🔭 احسب"}
+          <button
+            onClick={() => calculate()}
+            style={btn}
+          >
+            {loading
+              ? "جاري الحساب..."
+              : "🔭 احسب"}
           </button>
         </section>
 
@@ -252,25 +303,36 @@ export default function Page() {
               ["التاريخ", fmtDate(nowData.iso), "📅"],
               ["اليوم", fmtDay(nowData.iso), "🗓️"],
               ["الساعة", fmtTime(nowData.iso), "🕒"],
+
               [
                 "ارتفاع القمر الآن",
                 `${nowData.altitude}°`,
                 "△",
                 nowData.jplVerified,
               ],
+
               [
                 "اتجاه القمر الآن",
-                `${nowData.azimuth}° - ${directionName(nowData.azimuth)}`,
+                `${nowData.azimuth}° - ${directionName(
+                  nowData.azimuth
+                )}`,
                 "🧭",
                 nowData.jplVerified,
               ],
-              ["عمر القمر الآن (اقتران مركزي)", nowData.ageText, "☾"],
+
+              [
+                "عمر القمر الآن (اقتران مركزي)",
+                nowData.ageText,
+                "☾",
+              ],
+
               [
                 "الاستطالة الآن",
                 `${nowData.elongation}°`,
                 "☼",
                 nowData.jplVerified,
               ],
+
               [
                 "الإضاءة الآن",
                 `${nowData.illumination}%`,
@@ -286,48 +348,98 @@ export default function Page() {
             title={`👁️ أفضل وقت لرؤية ${hilalTitle} حسب معيار عودة`}
             color="#fb923c"
             data={[
-              ["التاريخ", fmtDate(hilalBest.iso), "📅"],
-              ["اليوم", fmtDay(hilalBest.iso), "🗓️"],
-              ["أفضل وقت للرؤية", fmtTime(result.hilal.bestTimeIso), "🕒"],
+              [
+                "التاريخ",
+                fmtDate(hilalBest.iso),
+                "📅",
+              ],
+
+              [
+                "اليوم",
+                fmtDay(hilalBest.iso),
+                "🗓️",
+              ],
+
+              [
+                "أفضل وقت للرؤية",
+                fmtTime(result.hilal.bestTimeIso),
+                "🕒",
+              ],
+
               [
                 "حالة الرؤية",
-                `${visibility?.icon || "⚪"} ${visibility?.label || "-"}`,
+                `${visibility?.icon || "⚪"} ${
+                  visibility?.label || "-"
+                }`,
                 "👁️",
               ],
-              ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
-              ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
-              ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
+
+              [
+                "غروب الشمس",
+                fmtTime(result.hilal.sunsetIso),
+                "🌇",
+              ],
+
+              [
+                "غروب القمر",
+                fmtTime(result.hilal.moonsetIso),
+                "🌙",
+              ],
+
+              [
+                "مكث القمر",
+                `${result.hilal.lag} دقيقة`,
+                "⌛",
+              ],
+
               [
                 "ارتفاع الهلال",
                 `${hilalBest.altitude}°`,
                 "△",
                 hilalBest.jplVerified,
               ],
+
               [
                 "اتجاه الهلال",
-                `${hilalBest.azimuth}° - ${directionName(hilalBest.azimuth)}`,
+                `${hilalBest.azimuth}° - ${directionName(
+                  hilalBest.azimuth
+                )}`,
                 "🧭",
                 hilalBest.jplVerified,
               ],
-              ["عمر الهلال (اقتران مركزي)", hilalBest.ageText, "☾"],
+
+              [
+                "عمر الهلال (اقتران مركزي)",
+                hilalBest.ageText,
+                "☾",
+              ],
+
               [
                 "الاستطالة",
                 `${hilalBest.elongation}°`,
                 "☼",
                 hilalBest.jplVerified,
               ],
+
               [
                 "الإضاءة",
                 `${hilalBest.illumination}%`,
                 "🌙",
                 hilalBest.jplVerified,
               ],
-              ["q معيار عودة", visibility?.q || "-", "q"],
+
+              [
+                "q معيار عودة",
+                visibility?.q || "-",
+                "q",
+              ],
+
               [
                 "ارتفاع نسبي",
                 `${visibility?.relativeAltitude || "-"}°`,
                 "△",
               ],
+
               [
                 "عرض الهلال",
                 `${visibility?.crescentWidthArcMin || "-"}′`,
@@ -338,18 +450,28 @@ export default function Page() {
         )}
 
         <section style={analysisCardStyle}>
-          <h2 style={analysisTitleStyle}>🔮 توقعات الأهلة القادمة</h2>
+          <h2 style={analysisTitleStyle}>
+            🔮 توقعات الأهلة القادمة
+          </h2>
 
           <div style={forecastGridStyle}>
             <div style={fieldWrapStyle}>
-              <div style={labelStyle}>الشهر الهجري</div>
+              <div style={labelStyle}>
+                الشهر الهجري
+              </div>
+
               <select
                 value={forecastMonth}
-                onChange={(e) => setForecastMonth(e.target.value)}
+                onChange={(e) =>
+                  setForecastMonth(e.target.value)
+                }
                 style={inputStyle}
               >
                 {HIJRI_MONTHS.map((m, i) => (
-                  <option key={m} value={String(i + 1)}>
+                  <option
+                    key={m}
+                    value={String(i + 1)}
+                  >
                     {m}
                   </option>
                 ))}
@@ -357,25 +479,41 @@ export default function Page() {
             </div>
 
             <div style={fieldWrapStyle}>
-              <div style={labelStyle}>السنة الهجرية</div>
+              <div style={labelStyle}>
+                السنة الهجرية
+              </div>
+
               <select
                 value={forecastYear}
-                onChange={(e) => setForecastYear(e.target.value)}
+                onChange={(e) =>
+                  setForecastYear(e.target.value)
+                }
                 style={inputStyle}
               >
-                {Array.from({ length: 80 }).map((_, i) => {
-                  const y = 1440 + i;
-                  return (
-                    <option key={y} value={String(y)}>
-                      {y}
-                    </option>
-                  );
-                })}
+                {Array.from({ length: 80 }).map(
+                  (_, i) => {
+                    const y = 1440 + i;
+
+                    return (
+                      <option
+                        key={y}
+                        value={String(y)}
+                      >
+                        {y}
+                      </option>
+                    );
+                  }
+                )}
               </select>
             </div>
           </div>
 
-          <button onClick={() => calculate({ forecast: true })} style={btn2}>
+          <button
+            onClick={() =>
+              calculate({ forecast: true })
+            }
+            style={btn2}
+          >
             احسب توقعات الهلال
           </button>
 
@@ -384,25 +522,58 @@ export default function Page() {
               title={`🔮 أفضل وقت لرؤية ${forecast.monthTitle} حسب معيار عودة`}
               color="#60a5fa"
               data={[
-                ["التاريخ", fmtDate(forecastBest.iso), "📅"],
-                ["اليوم", fmtDay(forecastBest.iso), "🗓️"],
-                ["أفضل وقت للرؤية", fmtTime(forecast.bestTimeIso), "🕒"],
+                [
+                  "التاريخ",
+                  fmtDate(forecastBest.iso),
+                  "📅",
+                ],
+
+                [
+                  "اليوم",
+                  fmtDay(forecastBest.iso),
+                  "🗓️",
+                ],
+
+                [
+                  "أفضل وقت للرؤية",
+                  fmtTime(forecast.bestTimeIso),
+                  "🕒",
+                ],
+
                 [
                   "حالة الرؤية",
                   `${forecastVisibility?.icon || "⚪"} ${
-                    forecastVisibility?.label || "-"
+                    forecastVisibility?.label ||
+                    "-"
                   }`,
                   "👁️",
                 ],
-                ["غروب الشمس", fmtTime(forecast.sunsetIso), "🌇"],
-                ["غروب القمر", fmtTime(forecast.moonsetIso), "🌙"],
-                ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
+
+                [
+                  "غروب الشمس",
+                  fmtTime(forecast.sunsetIso),
+                  "🌇",
+                ],
+
+                [
+                  "غروب القمر",
+                  fmtTime(forecast.moonsetIso),
+                  "🌙",
+                ],
+
+                [
+                  "مكث القمر",
+                  `${forecast.lag} دقيقة`,
+                  "⌛",
+                ],
+
                 [
                   "ارتفاع الهلال",
                   `${forecastBest.altitude}°`,
                   "△",
                   forecastBest.jplVerified,
                 ],
+
                 [
                   "اتجاه الهلال",
                   `${forecastBest.azimuth}° - ${directionName(
@@ -411,25 +582,39 @@ export default function Page() {
                   "🧭",
                   forecastBest.jplVerified,
                 ],
-                ["عمر الهلال (اقتران مركزي)", forecastBest.ageText, "☾"],
+
+                [
+                  "عمر الهلال (اقتران مركزي)",
+                  forecastBest.ageText,
+                  "☾",
+                ],
+
                 [
                   "الاستطالة",
                   `${forecastBest.elongation}°`,
                   "☼",
                   forecastBest.jplVerified,
                 ],
+
                 [
                   "الإضاءة",
                   `${forecastBest.illumination}%`,
                   "🌙",
                   forecastBest.jplVerified,
                 ],
-                ["q معيار عودة", forecastVisibility?.q || "-", "q"],
+
+                [
+                  "q معيار عودة",
+                  forecastVisibility?.q || "-",
+                  "q",
+                ],
+
                 [
                   "ارتفاع نسبي",
                   `${forecastVisibility?.relativeAltitude || "-"}°`,
                   "△",
                 ],
+
                 [
                   "عرض الهلال",
                   `${forecastVisibility?.crescentWidthArcMin || "-"}′`,
@@ -440,110 +625,74 @@ export default function Page() {
           )}
         </section>
 
-        <section style={analysisCardStyle}>
-          <h2 style={analysisTitleStyle}>🛰️ تحليل وقت الرصد الحقيقي</h2>
-
-          <div style={analysisTextStyle}>
-            حسب موقعك الحالي:
-            <br />
-            <DmsText value={decimalToDMS(lat, "lat")} />
-            <br />
-            <DmsText value={decimalToDMS(lng, "lng")} />
-            <br />
-            لمعرفة معطيات الهلال وقت الرصد الفعلي أدخل الوقت هنا.
-          </div>
-
-          <div style={dateInputWrapStyle}>
-            <input
-              type="datetime-local"
-              value={observeTime}
-              onChange={(e) => setObserveTime(e.target.value)}
-              style={dateInputStyle}
-            />
-          </div>
-
-          <button onClick={() => calculate()} style={btn2}>
-            احسب معطيات وقت الرصد
-          </button>
-
-          {custom && (
-            <Section
-              title=""
-              color="#60a5fa"
-              data={[
-                ["وقت الرصد", fmtTime(custom.iso), "🕒"],
-                [
-                  "ارتفاع الهلال",
-                  `${custom.altitude}°`,
-                  "△",
-                  custom.jplVerified,
-                ],
-                [
-                  "الاستطالة",
-                  `${custom.elongation}°`,
-                  "☼",
-                  custom.jplVerified,
-                ],
-                [
-                  "الإضاءة",
-                  `${custom.illumination}%`,
-                  "🌙",
-                  custom.jplVerified,
-                ],
-                ["عمر الهلال (اقتران مركزي)", custom.ageText, "☾"],
-                [
-                  "اتجاه الهلال",
-                  `${custom.azimuth}° - ${directionName(custom.azimuth)}`,
-                  "🧭",
-                  custom.jplVerified,
-                ],
-                [
-                  "مكث القمر المتبقي",
-                  `${custom.remainingMoonset} دقيقة`,
-                  "⌛",
-                ],
-              ]}
-            />
-          )}
-        </section>
-
         <div style={noteStyle}>
-          🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
-          Horizons عند توفر الاتصال. أفضل وقت الرؤية محسوب وفق قاعدة عودة:
-          غروب الشمس + 4/9 من مكث القمر.
+          🛰️ القيم التي تحمل علامة NASA تم
+          التحقق منها مباشرة عبر NASA JPL
+          Horizons عند توفر الاتصال.
         </div>
       </div>
     </main>
   );
 }
 
-function Field({ label, value, setValue }: any) {
+function Field({
+  label,
+  value,
+  setValue,
+}: any) {
   return (
     <div style={fieldWrapStyle}>
-      <div style={labelStyle}>{label}</div>
+      <div style={labelStyle}>
+        {label}
+      </div>
 
       <input
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) =>
+          setValue(e.target.value)
+        }
         style={inputStyle}
       />
     </div>
   );
 }
 
-function Section({ title, color, data }: any) {
+function Section({
+  title,
+  color,
+  data,
+}: any) {
   return (
     <section style={sectionStyle(color)}>
-      {title && <h2 style={sectionTitleStyle}>{title}</h2>}
+      {title && (
+        <h2 style={sectionTitleStyle}>
+          {title}
+        </h2>
+      )}
 
       <div style={resultGridStyle}>
         {data.map((item: any, i: number) => (
-          <div key={i} style={resultCardStyle}>
-            {item[3] && <div style={nasaBadgeStyle}>NASA</div>}
+          <div
+            key={i}
+            style={resultCardStyle}
+          >
+            {item[3] && (
+              <div style={nasaBadgeStyle}>
+                NASA
+              </div>
+            )}
 
-            <div style={resultLabelStyle}>{item[0]}</div>
-            <div style={resultIconStyle}>{item[2]}</div>
-            <div style={resultValueStyle}>{item[1]}</div>
+            <div style={resultLabelStyle}>
+              {item[0]}
+            </div>
+
+            <div style={resultIconStyle}>
+              {item[2]}
+            </div>
+
+            <div style={resultValueStyle}>
+              {item[1]}
+            </div>
           </div>
         ))}
       </div>
@@ -555,7 +704,8 @@ const boxHeight = 78;
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
-  background: "radial-gradient(circle at top,#0f172a,#020617 45%,#000)",
+  background:
+    "radial-gradient(circle at top,#0f172a,#020617 45%,#000)",
   color: "white",
   fontFamily: "Arial, sans-serif",
   direction: "rtl",
@@ -592,12 +742,13 @@ const nasaStatusStyle: React.CSSProperties = {
   marginTop: 10,
 };
 
-const inputCardStyle: React.CSSProperties = {
-  background: "rgba(15,23,42,.92)",
-  borderRadius: 22,
-  padding: 24,
-  marginBottom: 24,
-};
+const inputCardStyle: React.CSSProperties =
+  {
+    background: "rgba(15,23,42,.92)",
+    borderRadius: 22,
+    padding: 24,
+    marginBottom: 24,
+  };
 
 const gpsStyle: React.CSSProperties = {
   textAlign: "center",
@@ -606,27 +757,32 @@ const gpsStyle: React.CSSProperties = {
   marginBottom: 22,
 };
 
-const inputGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 20,
-  alignItems: "end",
-};
+const inputGridStyle: React.CSSProperties =
+  {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit,minmax(220px,1fr))",
+    gap: 20,
+    alignItems: "end",
+  };
 
-const forecastGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 20,
-  alignItems: "end",
-  marginBottom: 8,
-};
+const forecastGridStyle: React.CSSProperties =
+  {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit,minmax(220px,1fr))",
+    gap: 20,
+    alignItems: "end",
+    marginBottom: 8,
+  };
 
-const fieldWrapStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "flex-end",
-  minWidth: 0,
-};
+const fieldWrapStyle: React.CSSProperties =
+  {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-end",
+    minWidth: 0,
+  };
 
 const labelStyle: React.CSSProperties = {
   minHeight: 28,
@@ -644,11 +800,11 @@ const inputStyle: React.CSSProperties = {
   height: boxHeight,
   padding: "0 16px",
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,.15)",
+  border:
+    "1px solid rgba(255,255,255,.15)",
   background: "#020617",
   color: "white",
   colorScheme: "dark",
-  accentColor: "#ffffff",
   fontSize: 24,
   fontWeight: 900,
   boxSizing: "border-box",
@@ -660,7 +816,8 @@ const dmsBoxStyle: React.CSSProperties = {
   height: boxHeight,
   background: "#020617",
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,.15)",
+  border:
+    "1px solid rgba(255,255,255,.15)",
   boxSizing: "border-box",
   padding: "8px 12px",
   lineHeight: 1.7,
@@ -673,39 +830,20 @@ const dmsBoxStyle: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const analysisCardStyle: React.CSSProperties = {
-  background: "rgba(15,23,42,.92)",
-  borderRadius: 22,
-  padding: 24,
-  marginBottom: 20,
-};
+const analysisCardStyle: React.CSSProperties =
+  {
+    background: "rgba(15,23,42,.92)",
+    borderRadius: 22,
+    padding: 24,
+    marginBottom: 20,
+  };
 
-const analysisTitleStyle: React.CSSProperties = {
-  textAlign: "center",
-  fontWeight: 900,
-  fontSize: 26,
-};
-
-const analysisTextStyle: React.CSSProperties = {
-  textAlign: "center",
-  lineHeight: 1.9,
-  marginBottom: 16,
-  fontWeight: 800,
-  fontSize: 18,
-};
-
-const dateInputWrapStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "center",
-  marginTop: 14,
-  marginBottom: 14,
-};
-
-const dateInputStyle: React.CSSProperties = {
-  ...inputStyle,
-  maxWidth: 420,
-  textAlign: "center",
-};
+const analysisTitleStyle: React.CSSProperties =
+  {
+    textAlign: "center",
+    fontWeight: 900,
+    fontSize: 26,
+  };
 
 const btn: React.CSSProperties = {
   width: "100%",
@@ -713,7 +851,8 @@ const btn: React.CSSProperties = {
   padding: 18,
   borderRadius: 14,
   border: "none",
-  background: "linear-gradient(135deg,#2563eb,#7c3aed)",
+  background:
+    "linear-gradient(135deg,#2563eb,#7c3aed)",
   color: "white",
   fontSize: 24,
   fontWeight: 900,
@@ -724,14 +863,18 @@ const btn2: React.CSSProperties = {
   marginTop: 16,
   padding: 16,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,.16)",
-  background: "rgba(59,130,246,.28)",
+  border:
+    "1px solid rgba(255,255,255,.16)",
+  background:
+    "rgba(59,130,246,.28)",
   color: "white",
   fontSize: 22,
   fontWeight: 900,
 };
 
-const sectionStyle = (color: string): React.CSSProperties => ({
+const sectionStyle = (
+  color: string
+): React.CSSProperties => ({
   background: "rgba(15,23,42,.92)",
   border: `1px solid ${color}`,
   borderRadius: 22,
@@ -739,63 +882,70 @@ const sectionStyle = (color: string): React.CSSProperties => ({
   marginBottom: 20,
 });
 
-const sectionTitleStyle: React.CSSProperties = {
-  textAlign: "center",
-  marginBottom: 20,
-  fontWeight: 900,
-  fontSize: 28,
-};
+const sectionTitleStyle: React.CSSProperties =
+  {
+    textAlign: "center",
+    marginBottom: 20,
+    fontWeight: 900,
+    fontSize: 28,
+  };
 
-const resultGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
-  gap: 14,
-};
+const resultGridStyle: React.CSSProperties =
+  {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit,minmax(190px,1fr))",
+    gap: 14,
+  };
 
-const resultCardStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,.06)",
-  borderRadius: 14,
-  padding: 14,
-  textAlign: "center",
-  minHeight: 118,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  position: "relative",
-};
+const resultCardStyle: React.CSSProperties =
+  {
+    background: "rgba(255,255,255,.06)",
+    borderRadius: 14,
+    padding: 14,
+    textAlign: "center",
+    minHeight: 118,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  };
 
-const nasaBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 8,
-  left: 8,
-  background: "#ffffff",
-  color: "#0f172a",
-  borderRadius: 999,
-  padding: "3px 8px",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.5px",
-};
+const nasaBadgeStyle: React.CSSProperties =
+  {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    background: "#ffffff",
+    color: "#0f172a",
+    borderRadius: 999,
+    padding: "3px 8px",
+    fontSize: 11,
+    fontWeight: 900,
+  };
 
-const resultLabelStyle: React.CSSProperties = {
-  opacity: 0.85,
-  marginBottom: 8,
-  fontWeight: 900,
-  fontSize: 16,
-};
+const resultLabelStyle: React.CSSProperties =
+  {
+    opacity: 0.85,
+    marginBottom: 8,
+    fontWeight: 900,
+    fontSize: 16,
+  };
 
-const resultIconStyle: React.CSSProperties = {
-  fontSize: 28,
-  lineHeight: 1.2,
-  marginBottom: 8,
-};
+const resultIconStyle: React.CSSProperties =
+  {
+    fontSize: 28,
+    lineHeight: 1.2,
+    marginBottom: 8,
+  };
 
-const resultValueStyle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 22,
-  lineHeight: 1.4,
-};
+const resultValueStyle: React.CSSProperties =
+  {
+    fontWeight: 900,
+    fontSize: 22,
+    lineHeight: 1.4,
+  };
 
 const noteStyle: React.CSSProperties = {
   border: "1px solid #22c55e",

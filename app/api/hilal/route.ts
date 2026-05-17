@@ -6,8 +6,18 @@ const MAX_REASONABLE_LAG_MINUTES = 18 * 60;
 const KEEP_CURRENT_HILAL_DAYS = 7;
 
 const HIJRI_MONTHS = [
-  "محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة",
-  "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة",
+  "محرم",
+  "صفر",
+  "ربيع الأول",
+  "ربيع الآخر",
+  "جمادى الأولى",
+  "جمادى الآخرة",
+  "رجب",
+  "شعبان",
+  "رمضان",
+  "شوال",
+  "ذو القعدة",
+  "ذو الحجة",
 ];
 
 function fmt(n: number) {
@@ -130,7 +140,12 @@ function parseJplMoonData(text: string) {
   return null;
 }
 
-async function getJplMoonData(date: Date, lat: number, lng: number, heightMeters: number) {
+async function getJplMoonData(
+  date: Date,
+  lat: number,
+  lng: number,
+  heightMeters: number
+) {
   try {
     const cleanDate = floorToMinute(date);
     const start = formatUtcForJpl(cleanDate);
@@ -163,13 +178,15 @@ async function getJplMoonData(date: Date, lat: number, lng: number, heightMeters
 
 function hijriMonthTitle(date: Date) {
   try {
-    const nextHijriDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    const targetHijriDate = new Date(date.getTime() + 48 * 60 * 60 * 1000);
+
     const formatter = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
       month: "long",
       year: "numeric",
+      timeZone: "Asia/Riyadh",
     });
 
-    const parts = formatter.formatToParts(nextHijriDay);
+    const parts = formatter.formatToParts(targetHijriDate);
     const month = parts.find((p) => p.type === "month")?.value || "";
     const year = parts.find((p) => p.type === "year")?.value || "";
 
@@ -517,46 +534,6 @@ async function findHilalData(observer: Astronomy.Observer, lat: number, lng: num
   );
 }
 
-async function customObservation(
-  observer: Astronomy.Observer,
-  lat: number,
-  lng: number,
-  heightMeters: number,
-  observeTime: string
-) {
-  const customDate = floorToMinute(new Date(observeTime));
-  if (Number.isNaN(customDate.getTime())) {
-    return { invalid: true, error: "وقت الرصد غير صحيح." };
-  }
-
-  const previous = searchNewMoonBefore(customDate);
-
-  const data: any = await moonCalc(
-    customDate,
-    observer,
-    lat,
-    lng,
-    heightMeters,
-    previous,
-    true
-  );
-
-  if (data.invalid) return data;
-
-  const moonset = findMoonsetAfterLocal(observer, customDate);
-  let remainingMoonset = "0.0";
-
-  if (moonset) {
-    const remaining = (moonset.getTime() - customDate.getTime()) / 60000;
-    remainingMoonset =
-      remaining > 0 && remaining <= MAX_REASONABLE_LAG_MINUTES
-        ? remaining.toFixed(1)
-        : "0.0";
-  }
-
-  return { ...data, remainingMoonset };
-}
-
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -564,7 +541,6 @@ export async function GET(request: Request) {
     const lat = Number(searchParams.get("lat"));
     const lng = Number(searchParams.get("lng"));
     const height = Number(searchParams.get("height") ?? "0");
-    const observeTime = searchParams.get("observeTime");
     const forecastMonth = Number(searchParams.get("forecastMonth"));
     const forecastYear = Number(searchParams.get("forecastYear"));
 
@@ -582,11 +558,6 @@ export async function GET(request: Request) {
     const hilal = await findHilalData(observer, lat, lng, heightMeters);
     if (!hilal) {
       return NextResponse.json({ error: "لم يتم العثور على هلال مناسب خلال الأيام القادمة." });
-    }
-
-    let custom = null;
-    if (observeTime) {
-      custom = await customObservation(observer, lat, lng, heightMeters, observeTime);
     }
 
     let forecast = null;
@@ -614,7 +585,6 @@ export async function GET(request: Request) {
       observer: { lat, lng, height: heightMeters },
       nowData,
       hilal,
-      custom,
       forecast,
       engineValidation: {
         ok: true,
