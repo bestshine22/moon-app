@@ -49,6 +49,11 @@ function fmtDateTimeLine(iso?: string) {
   return `${fmtDay(iso)} / ${fmtDate(iso)} / ${fmtTime(iso)}`;
 }
 
+function fmtDayDateLine(iso?: string) {
+  if (!iso) return "-";
+  return `${fmtDay(iso)} / ${fmtDate(iso)}`;
+}
+
 function directionName(deg: string) {
   const d = Number(deg);
   if (d >= 337.5 || d < 22.5) return "شمال";
@@ -178,12 +183,16 @@ export default function Page() {
   }
 
   const nowData = result?.nowData;
+
+  const hilalSunset = result?.hilal?.sunsetData;
   const hilalBest = result?.hilal?.bestTimeData;
   const visibility = result?.hilal?.visibility;
+  const hilalTitle = result?.hilal?.monthTitle || "الهلال";
+
   const forecast = result?.forecast;
+  const forecastSunset = forecast?.sunsetData;
   const forecastBest = forecast?.bestTimeData;
   const forecastVisibility = forecast?.visibility;
-  const hilalTitle = result?.hilal?.monthTitle || "الهلال";
 
   return (
     <main style={pageStyle}>
@@ -192,7 +201,7 @@ export default function Page() {
           <div style={{ fontSize: 70 }}>🌙</div>
           <h1 style={titleStyle}>مرصد الهلال</h1>
           <p style={subtitleStyle}>حسابات فلكية دقيقة للهلال حسب موقعك</p>
-          <p style={nasaStatusStyle}>NASA JPL ACTIVE</p>
+          <p style={nasaStatusStyle}>NASA JPL CHECK ACTIVE</p>
         </header>
 
         <section style={inputCardStyle}>
@@ -260,15 +269,54 @@ export default function Page() {
           />
         )}
 
-        {hilalBest && (
-          <Section
-            title={`👁️ أفضل وقت لرؤية ${hilalTitle} حسب معيار عودة`}
+        {hilalSunset && hilalBest && (
+          <HilalOdehSection
+            title={`👁️ رؤية ${hilalTitle} حسب معيار عودة`}
             color="#fb923c"
-            data={[
+            commonData={[
               [
-                "التاريخ والوقت",
-                fmtDateTimeLine(result.hilal.bestTimeIso || hilalBest.iso),
+                "اليوم والتاريخ",
+                fmtDayDateLine(result.hilal.sunsetIso || hilalSunset.iso),
                 "🗓️",
+              ],
+              ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
+              ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
+              ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
+            ]}
+            sunsetData={[
+              [
+                "ارتفاع القمر عند الغروب",
+                `${hilalSunset.altitude}°`,
+                "△",
+                hilalSunset.jplVerified,
+              ],
+              [
+                "اتجاه القمر عند الغروب",
+                `${hilalSunset.azimuth}° / ${directionName(
+                  hilalSunset.azimuth
+                )}`,
+                "🧭",
+                hilalSunset.jplVerified,
+              ],
+              ["عمر الهلال عند الغروب", hilalSunset.ageText, "☾"],
+              [
+                "الاستطالة عند الغروب",
+                `${hilalSunset.elongation}°`,
+                "☼",
+                hilalSunset.jplVerified,
+              ],
+              [
+                "الإضاءة عند الغروب",
+                `${hilalSunset.illumination}%`,
+                "🌙",
+                hilalSunset.jplVerified,
+              ],
+            ]}
+            bestTimeData={[
+              [
+                "أفضل وقت للرؤية",
+                fmtTime(result.hilal.bestTimeIso || hilalBest.iso),
+                "🕒",
               ],
               [
                 "نتيجة معيار عودة",
@@ -277,30 +325,27 @@ export default function Page() {
                 }`,
                 "👁️",
               ],
-              ["غروب الشمس", fmtTime(result.hilal.sunsetIso), "🌇"],
-              ["غروب القمر", fmtTime(result.hilal.moonsetIso), "🌙"],
-              ["مكث القمر", `${result.hilal.lag} دقيقة`, "⌛"],
               [
-                "ارتفاع الهلال",
+                "ارتفاع القمر عند أفضل وقت",
                 `${hilalBest.altitude}°`,
                 "△",
                 hilalBest.jplVerified,
               ],
               [
-                "اتجاه الهلال",
+                "اتجاه القمر عند أفضل وقت",
                 `${hilalBest.azimuth}° / ${directionName(hilalBest.azimuth)}`,
                 "🧭",
                 hilalBest.jplVerified,
               ],
-              ["عمر الهلال (اقتران مركزي)", hilalBest.ageText, "☾"],
+              ["عمر الهلال عند أفضل وقت", hilalBest.ageText, "☾"],
               [
-                "الاستطالة",
+                "الاستطالة عند أفضل وقت",
                 `${hilalBest.elongation}°`,
                 "☼",
                 hilalBest.jplVerified,
               ],
               [
-                "الإضاءة",
+                "الإضاءة عند أفضل وقت",
                 `${hilalBest.illumination}%`,
                 "🌙",
                 hilalBest.jplVerified,
@@ -351,15 +396,54 @@ export default function Page() {
             احسب توقعات الهلال
           </button>
 
-          {forecastBest && (
-            <Section
-              title={`🔮 أفضل وقت لرؤية ${forecast.monthTitle} حسب معيار عودة`}
+          {forecastSunset && forecastBest && (
+            <HilalOdehSection
+              title={`🔮 رؤية ${forecast.monthTitle} حسب معيار عودة`}
               color="#60a5fa"
-              data={[
+              commonData={[
                 [
-                  "التاريخ والوقت",
-                  fmtDateTimeLine(forecast.bestTimeIso || forecastBest.iso),
+                  "اليوم والتاريخ",
+                  fmtDayDateLine(forecast.sunsetIso || forecastSunset.iso),
                   "🗓️",
+                ],
+                ["غروب الشمس", fmtTime(forecast.sunsetIso), "🌇"],
+                ["غروب القمر", fmtTime(forecast.moonsetIso), "🌙"],
+                ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
+              ]}
+              sunsetData={[
+                [
+                  "ارتفاع القمر عند الغروب",
+                  `${forecastSunset.altitude}°`,
+                  "△",
+                  forecastSunset.jplVerified,
+                ],
+                [
+                  "اتجاه القمر عند الغروب",
+                  `${forecastSunset.azimuth}° / ${directionName(
+                    forecastSunset.azimuth
+                  )}`,
+                  "🧭",
+                  forecastSunset.jplVerified,
+                ],
+                ["عمر الهلال عند الغروب", forecastSunset.ageText, "☾"],
+                [
+                  "الاستطالة عند الغروب",
+                  `${forecastSunset.elongation}°`,
+                  "☼",
+                  forecastSunset.jplVerified,
+                ],
+                [
+                  "الإضاءة عند الغروب",
+                  `${forecastSunset.illumination}%`,
+                  "🌙",
+                  forecastSunset.jplVerified,
+                ],
+              ]}
+              bestTimeData={[
+                [
+                  "أفضل وقت للرؤية",
+                  fmtTime(forecast.bestTimeIso || forecastBest.iso),
+                  "🕒",
                 ],
                 [
                   "نتيجة معيار عودة",
@@ -370,32 +454,29 @@ export default function Page() {
                   }`,
                   "👁️",
                 ],
-                ["غروب الشمس", fmtTime(forecast.sunsetIso), "🌇"],
-                ["غروب القمر", fmtTime(forecast.moonsetIso), "🌙"],
-                ["مكث القمر", `${forecast.lag} دقيقة`, "⌛"],
                 [
-                  "ارتفاع الهلال",
+                  "ارتفاع القمر عند أفضل وقت",
                   `${forecastBest.altitude}°`,
                   "△",
                   forecastBest.jplVerified,
                 ],
                 [
-                  "اتجاه الهلال",
+                  "اتجاه القمر عند أفضل وقت",
                   `${forecastBest.azimuth}° / ${directionName(
                     forecastBest.azimuth
                   )}`,
                   "🧭",
                   forecastBest.jplVerified,
                 ],
-                ["عمر الهلال (اقتران مركزي)", forecastBest.ageText, "☾"],
+                ["عمر الهلال عند أفضل وقت", forecastBest.ageText, "☾"],
                 [
-                  "الاستطالة",
+                  "الاستطالة عند أفضل وقت",
                   `${forecastBest.elongation}°`,
                   "☼",
                   forecastBest.jplVerified,
                 ],
                 [
-                  "الإضاءة",
+                  "الإضاءة عند أفضل وقت",
                   `${forecastBest.illumination}%`,
                   "🌙",
                   forecastBest.jplVerified,
@@ -406,8 +487,9 @@ export default function Page() {
         </section>
 
         <div style={noteStyle}>
-          🛰️ NASA JPL Horizons يستخدم للتحقق الخارجي عند توفر الاتصال. نتيجة
-          الرؤية المعروضة مختصرة ومحسوبة وفق معيار عودة من بيانات محلية متسقة.
+          🛰️ NASA JPL Horizons يستخدم للتحقق الخارجي عند توفر الاتصال. قسم رؤية
+          الهلال مفصول إلى بيانات وقت الغروب وبيانات أفضل وقت، ونتيجة عودة محسوبة
+          عند أفضل وقت للرؤية.
         </div>
       </div>
     </main>
@@ -431,18 +513,54 @@ function Section({ title, color, data }: any) {
   return (
     <section style={sectionStyle(color)}>
       {title && <h2 style={sectionTitleStyle}>{title}</h2>}
+      <ResultGrid data={data} />
+    </section>
+  );
+}
 
-      <div style={resultGridStyle}>
-        {data.map((item: any, i: number) => (
-          <div key={i} style={resultCardStyle}>
-            {item[3] && <div style={nasaBadgeStyle}>NASA</div>}
-            <div style={resultLabelStyle}>{item[0]}</div>
-            <div style={resultIconStyle}>{item[2]}</div>
-            <div style={resultValueStyle}>{item[1]}</div>
-          </div>
-        ))}
+function HilalOdehSection({
+  title,
+  color,
+  commonData,
+  sunsetData,
+  bestTimeData,
+}: any) {
+  return (
+    <section style={sectionStyle(color)}>
+      {title && <h2 style={sectionTitleStyle}>{title}</h2>}
+
+      <div style={subBlockStyle}>
+        <h3 style={subTitleStyle}>📌 معلومات عامة</h3>
+        <ResultGrid data={commonData} />
+      </div>
+
+      <div style={twoColumnStyle}>
+        <div style={subBlockStyle}>
+          <h3 style={subTitleStyle}>🌇 بيانات وقت الغروب</h3>
+          <ResultGrid data={sunsetData} />
+        </div>
+
+        <div style={subBlockStyle}>
+          <h3 style={subTitleStyle}>👁️ بيانات أفضل وقت</h3>
+          <ResultGrid data={bestTimeData} />
+        </div>
       </div>
     </section>
+  );
+}
+
+function ResultGrid({ data }: any) {
+  return (
+    <div style={resultGridStyle}>
+      {data.map((item: any, i: number) => (
+        <div key={i} style={resultCardStyle}>
+          {item[3] && <div style={nasaBadgeStyle}>NASA</div>}
+          <div style={resultLabelStyle}>{item[0]}</div>
+          <div style={resultIconStyle}>{item[2]}</div>
+          <div style={resultValueStyle}>{item[1]}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -617,6 +735,29 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: 20,
   fontWeight: 900,
   fontSize: 28,
+};
+
+const subBlockStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,.04)",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 16,
+};
+
+const subTitleStyle: React.CSSProperties = {
+  textAlign: "center",
+  fontWeight: 900,
+  fontSize: 22,
+  marginTop: 0,
+  marginBottom: 16,
+};
+
+const twoColumnStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+  gap: 16,
+  alignItems: "start",
 };
 
 const resultGridStyle: React.CSSProperties = {

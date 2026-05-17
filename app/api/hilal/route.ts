@@ -227,6 +227,7 @@ function forecastNewMoonForHijriMonth(year: number, month: number) {
 
 function sunAltitudeLocal(date: Date, observer: Astronomy.Observer) {
   const time = new Astronomy.AstroTime(date);
+
   const sunEq = Astronomy.Equator(
     Astronomy.Body.Sun,
     time,
@@ -502,16 +503,14 @@ async function buildHilalFromNewMoon(
 
     const bestTime = floorToMinute(addMinutes(sunset, (4 / 9) * lag));
 
-    const bestTimeDataLocal: any = moonCalcLocal(
-      bestTime,
-      observer,
-      newMoon
-    );
-
+    const bestTimeDataLocal: any = moonCalcLocal(bestTime, observer, newMoon);
     if (bestTimeDataLocal.invalid) continue;
 
-    const bestTimeDataJpl = await moonCalc(
-      bestTime,
+    const sunAltAtBest = sunAltitudeLocal(bestTime, observer);
+    const visibility = odehVisibility(bestTimeDataLocal, lag, sunAltAtBest);
+
+    const jplSunsetData = await moonCalc(
+      sunset,
       observer,
       lat,
       lng,
@@ -520,12 +519,14 @@ async function buildHilalFromNewMoon(
       true
     );
 
-    const sunAltAtBest = sunAltitudeLocal(bestTime, observer);
-
-    const visibility = odehVisibility(
-      bestTimeDataLocal,
-      lag,
-      sunAltAtBest
+    const jplBestTimeData = await moonCalc(
+      bestTime,
+      observer,
+      lat,
+      lng,
+      heightMeters,
+      newMoon,
+      true
     );
 
     return {
@@ -537,24 +538,26 @@ async function buildHilalFromNewMoon(
       bestTimeIso: bestTime.toISOString(),
       lag: lag.toFixed(1),
 
-      // مهم:
-      // بيانات العرض والحكم تكون من Astronomy Engine المحلي
-      // حتى تكون متسقة مع حساب معيار عودة.
+      // بيانات وقت الغروب
+      sunsetData: sunsetDataLocal,
+
+      // بيانات أفضل وقت
       bestTimeData: bestTimeDataLocal,
       odehBestTimeData: bestTimeDataLocal,
 
-      // NASA JPL موجود كتحقق خارجي فقط، ولا يدخل في حكم عودة.
-      jplBestTimeData: bestTimeDataJpl,
+      // NASA للتحقق الخارجي فقط، لا تدخل في حكم عودة ولا في أرقام القسم البرتقالي
+      jplSunsetData,
+      jplBestTimeData,
 
-      visualBest: bestTimeDataLocal,
       visibility,
 
       validation: {
         ok: true,
         notes: [
-          "أفضل وقت للرؤية = غروب الشمس + 4/9 من مكث القمر.",
-          "نتيجة الرؤية مختصرة وفق معيار عودة.",
-          "حكم معيار عودة محسوب من بيانات محلية متسقة، وNASA JPL يستخدم كتحقق خارجي عند توفره.",
+          "القسم البرتقالي مفصول إلى بيانات وقت الغروب وبيانات أفضل وقت.",
+          "نتيجة معيار عودة محسوبة عند أفضل وقت = غروب الشمس + 4/9 من مكث القمر.",
+          "الأرقام المعروضة في قسم الهلال من Astronomy Engine حتى تكون متسقة مع حكم معيار عودة.",
+          "NASA JPL Horizons محفوظ كتحقق خارجي فقط عند توفر الاتصال.",
         ],
       },
     };
@@ -661,7 +664,7 @@ export async function GET(request: Request) {
         ok: true,
         primaryExternalReference: "NASA JPL Horizons",
         odeh:
-          "أفضل وقت للرؤية = Sunset + 4/9 Moon Lag، ونتيجة الرؤية مختصرة وفق معيار عودة.",
+          "أفضل وقت للرؤية = Sunset + 4/9 Moon Lag. نتيجة الرؤية مختصرة وفق معيار عودة.",
       },
     });
   } catch (err: any) {
