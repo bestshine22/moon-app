@@ -364,7 +364,9 @@ export default function Page() {
                 [
                   "نتيجة معيار عودة",
                   `${forecastVisibility?.icon || "⚪"} ${
-                    forecastVisibility?.result || forecastVisibility?.label || "-"
+                    forecastVisibility?.result ||
+                    forecastVisibility?.label ||
+                    "-"
                   }`,
                   "👁️",
                 ],
@@ -404,8 +406,8 @@ export default function Page() {
         </section>
 
         <div style={noteStyle}>
-          🛰️ القيم التي تحمل علامة NASA تم التحقق منها مباشرة عبر NASA JPL
-          Horizons عند توفر الاتصال. نتيجة الرؤية مختصرة حسب معيار عودة.
+          🛰️ NASA JPL Horizons يستخدم للتحقق الخارجي عند توفر الاتصال. نتيجة
+          الرؤية المعروضة مختصرة ومحسوبة وفق معيار عودة من بيانات محلية متسقة.
         </div>
       </div>
     </main>

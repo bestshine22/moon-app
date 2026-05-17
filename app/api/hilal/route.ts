@@ -227,8 +227,22 @@ function forecastNewMoonForHijriMonth(year: number, month: number) {
 
 function sunAltitudeLocal(date: Date, observer: Astronomy.Observer) {
   const time = new Astronomy.AstroTime(date);
-  const sunEq = Astronomy.Equator(Astronomy.Body.Sun, time, observer, true, true);
-  const sunHor = Astronomy.Horizon(time, observer, sunEq.ra, sunEq.dec, "normal");
+  const sunEq = Astronomy.Equator(
+    Astronomy.Body.Sun,
+    time,
+    observer,
+    true,
+    true
+  );
+
+  const sunHor = Astronomy.Horizon(
+    time,
+    observer,
+    sunEq.ra,
+    sunEq.dec,
+    "normal"
+  );
+
   return sunHor.altitude;
 }
 
@@ -252,15 +266,17 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
   }
 
   const relativeAltitude = moonAlt - sunAlt;
+
   const moonSemiDiameterArcMin = 16.7;
   const crescentWidthArcMin =
     moonSemiDiameterArcMin * (1 - Math.cos((elongation * Math.PI) / 180));
 
   const w = crescentWidthArcMin;
+
   const threshold =
     11.8371 - 6.3226 * w + 0.7319 * w * w - 0.1018 * w * w * w;
 
-  const q = (relativeAltitude - threshold) / 10;
+  const q = relativeAltitude - threshold;
 
   if (moonAlt <= 0 || lagMinutes <= 0 || ageHours < 8) {
     return {
@@ -315,7 +331,11 @@ function odehVisibility(data: any, lagMinutes: number, sunAlt: number) {
   };
 }
 
-function moonCalcLocal(date: Date, observer: Astronomy.Observer, baseNewMoon?: Date) {
+function moonCalcLocal(
+  date: Date,
+  observer: Astronomy.Observer,
+  baseNewMoon?: Date
+) {
   const cleanDate = floorToMinute(date);
   const newMoon = baseNewMoon ?? searchNewMoonBefore(cleanDate);
   const ageHours = (cleanDate.getTime() - newMoon.getTime()) / 3600000;
@@ -331,8 +351,23 @@ function moonCalcLocal(date: Date, observer: Astronomy.Observer, baseNewMoon?: D
   }
 
   const time = new Astronomy.AstroTime(cleanDate);
-  const moonEq = Astronomy.Equator(Astronomy.Body.Moon, time, observer, true, true);
-  const moonHor = Astronomy.Horizon(time, observer, moonEq.ra, moonEq.dec, "normal");
+
+  const moonEq = Astronomy.Equator(
+    Astronomy.Body.Moon,
+    time,
+    observer,
+    true,
+    true
+  );
+
+  const moonHor = Astronomy.Horizon(
+    time,
+    observer,
+    moonEq.ra,
+    moonEq.dec,
+    "normal"
+  );
+
   const elongation = Astronomy.AngleFromSun(Astronomy.Body.Moon, time);
   const illumination = Astronomy.Illumination(Astronomy.Body.Moon, time);
   const illumPercent = illumination.phase_fraction * 100;
@@ -417,7 +452,14 @@ function findMoonsetAfterLocal(observer: Astronomy.Observer, startDate: Date) {
 }
 
 function findSunset(observer: Astronomy.Observer, date: Date) {
-  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
+  const dayStart = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0
+  );
 
   const event = Astronomy.SearchRiseSet(
     Astronomy.Body.Sun,
@@ -460,7 +502,15 @@ async function buildHilalFromNewMoon(
 
     const bestTime = floorToMinute(addMinutes(sunset, (4 / 9) * lag));
 
-    const bestTimeData = await moonCalc(
+    const bestTimeDataLocal: any = moonCalcLocal(
+      bestTime,
+      observer,
+      newMoon
+    );
+
+    if (bestTimeDataLocal.invalid) continue;
+
+    const bestTimeDataJpl = await moonCalc(
       bestTime,
       observer,
       lat,
@@ -471,7 +521,12 @@ async function buildHilalFromNewMoon(
     );
 
     const sunAltAtBest = sunAltitudeLocal(bestTime, observer);
-    const visibility = odehVisibility(bestTimeData, lag, sunAltAtBest);
+
+    const visibility = odehVisibility(
+      bestTimeDataLocal,
+      lag,
+      sunAltAtBest
+    );
 
     return {
       kind,
@@ -481,15 +536,25 @@ async function buildHilalFromNewMoon(
       moonsetIso: moonset.toISOString(),
       bestTimeIso: bestTime.toISOString(),
       lag: lag.toFixed(1),
-      bestTimeData,
-      visualBest: bestTimeData,
+
+      // مهم:
+      // بيانات العرض والحكم تكون من Astronomy Engine المحلي
+      // حتى تكون متسقة مع حساب معيار عودة.
+      bestTimeData: bestTimeDataLocal,
+      odehBestTimeData: bestTimeDataLocal,
+
+      // NASA JPL موجود كتحقق خارجي فقط، ولا يدخل في حكم عودة.
+      jplBestTimeData: bestTimeDataJpl,
+
+      visualBest: bestTimeDataLocal,
       visibility,
+
       validation: {
         ok: true,
         notes: [
           "أفضل وقت للرؤية = غروب الشمس + 4/9 من مكث القمر.",
           "نتيجة الرؤية مختصرة وفق معيار عودة.",
-          "تم استخدام NASA JPL Horizons للارتفاع والاتجاه والاستطالة والإضاءة عند توفره.",
+          "حكم معيار عودة محسوب من بيانات محلية متسقة، وNASA JPL يستخدم كتحقق خارجي عند توفره.",
         ],
       },
     };
@@ -529,7 +594,10 @@ export async function GET(request: Request) {
     const forecastYear = Number(searchParams.get("forecastYear"));
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return NextResponse.json({ error: "الإحداثيات غير صحيحة" }, { status: 400 });
+      return NextResponse.json(
+        { error: "الإحداثيات غير صحيحة" },
+        { status: 400 }
+      );
     }
 
     const heightMeters = Number.isFinite(height) ? height : 0;
